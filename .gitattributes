@@ -7,3 +7,6 @@
 *.md text eol=lf
 *.ico binary
 *.png binary
+*.traineddata binary
+*.ttf binary
+*.dll binary

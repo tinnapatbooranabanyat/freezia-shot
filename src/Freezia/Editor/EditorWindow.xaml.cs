@@ -213,6 +213,9 @@ public partial class EditorWindow : Window
         ToolStep.ToolTip = Strings.ToolStep;
         ToolEraser.ToolTip = Strings.ToolEraser;
         ClearAllButton.ToolTip = Strings.ClearAll;
+        PinButton.ToolTip = Strings.ActionPin;
+        OcrButton.ToolTip = Strings.ActionOcr;
+        QrButton.ToolTip = Strings.ActionQr;
         UndoButton.ToolTip = Strings.Undo;
         RedoButton.ToolTip = Strings.Redo;
         DeleteButton.ToolTip = Strings.Delete;
@@ -1353,6 +1356,13 @@ public partial class EditorWindow : Window
     }
 
     private void OnCopy(object sender, RoutedEventArgs e) => Copy();
+
+    /// <summary>The edited image (drawings included) as pixels, for pin / OCR / QR.</summary>
+    private PixelImage EditedImage() => PixelImage.FromBitmapSource(RenderOutput());
+
+    private void OnPin(object sender, RoutedEventArgs e) => _controller.Pin(EditedImage(), atCapturePosition: false);
+    private void OnOcr(object sender, RoutedEventArgs e) => _controller.Ocr(EditedImage());
+    private void OnQr(object sender, RoutedEventArgs e) => _controller.ReadCodes(EditedImage());
     private void OnSave(object sender, RoutedEventArgs e) => Save();
     private void OnSaveAs(object sender, RoutedEventArgs e) => SaveAs();
 

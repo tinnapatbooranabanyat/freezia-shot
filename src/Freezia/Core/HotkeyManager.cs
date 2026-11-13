@@ -275,6 +275,7 @@ public sealed class HotkeyManager : IDisposable
             0x43 => ctrl,                          // Ctrl+C
             0x53 => ctrl,                          // Ctrl+S / Ctrl+Shift+S
             0x45 or 0x46 or 0x41 => !ctrl,         // E, F, A
+            0x50 or 0x54 or 0x51 => !ctrl,         // P (pin), T (OCR), Q (QR)
             >= 0x25 and <= 0x28 => true,           // arrows
             _ => false,
         };

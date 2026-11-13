@@ -34,7 +34,27 @@ public static class Strings
     public static string OverlayFullScreen => T("เต็มจอนี้", "This screen");
     public static string OverlayAllScreens => T("ทุกจอ", "All screens");
     public static string OverlayCancel => T("ยกเลิก", "Cancel");
-    public static string OverlayHint => T("ลากเพื่อเลือกพื้นที่", "Drag to select an area");
+    public static string OverlayHint => T("ลากเพื่อเลือก • คลิก = ทั้งหน้าต่าง • กด Ctrl = ส่วนย่อย",
+                                          "Drag to select • Click = whole window • Hold Ctrl = UI element");
+    public static string ActionPin => T("ปักหมุดไว้บนจอ", "Pin to screen");
+    public static string ActionOcr => T("ดึงข้อความ (OCR)", "Extract text (OCR)");
+    public static string OpenLink => T("เปิดลิงก์", "Open link");
+    public static string Close => T("ปิด", "Close");
+    public static string TextCopied => T("คัดลอกข้อความแล้ว", "Text copied");
+    public static string PinActualSize => T("ขนาดจริง 100%", "Actual size 100%");
+    public static string OcrTitle => T("ข้อความจากภาพ", "Text from image");
+    public static string OcrBusy => T("กำลังอ่านข้อความ… (ครั้งแรกอาจใช้เวลาสักครู่)", "Reading text… (the first time takes a moment)");
+    public static string OcrNoText => T("ไม่พบข้อความในภาพนี้", "No text found in this image");
+    public static string OcrDone => T("พบข้อความ {0} ตัวอักษร • คัดลอกแล้ว แก้ไขก่อนคัดลอกซ้ำได้", "Found {0} characters • copied — you can edit and copy again");
+    public static string OcrFailed => T("อ่านข้อความไม่สำเร็จ", "Text recognition failed");
+    public static string OcrMissingRuntime => T("ต้องติดตั้ง Microsoft Visual C++ Redistributable (x64) ก่อนใช้ OCR — ติดตั้ง Freezia ใหม่ด้วยตัวติดตั้งจะได้ส่วนนี้มาด้วย",
+                                                "OCR needs the Microsoft Visual C++ Redistributable (x64) — reinstalling Freezia with its installer adds it");
+    public static string QrTitle => T("QR code / บาร์โค้ด", "QR code / barcode");
+    public static string QrBusy => T("กำลังอ่านโค้ด…", "Reading codes…");
+    public static string QrNone => T("ไม่พบ QR code หรือบาร์โค้ดในภาพนี้", "No QR code or barcode found in this image");
+    public static string QrFound => T("พบ {0} โค้ด ({1}) • คัดลอกแล้ว", "Found {0} code(s) ({1}) • copied");
+    public static string QrFailed => T("อ่านโค้ดไม่สำเร็จ", "Could not read codes");
+    public static string ActionQr => T("อ่าน QR / บาร์โค้ด", "Read QR / barcode");
     public static string ActionEdit => T("แก้ไข", "Edit");
     public static string ActionCopy => T("คัดลอก", "Copy");
     public static string ActionSave => T("บันทึก", "Save");

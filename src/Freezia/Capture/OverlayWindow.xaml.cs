@@ -38,6 +38,9 @@ public partial class OverlayWindow : Window
         BtnSave.ToolTip = Strings.ActionSave + " (Ctrl+S)";
         BtnSaveAs.ToolTip = Strings.ActionSaveAs + " (Ctrl+Shift+S)";
         BtnCancel.ToolTip = Strings.ActionCancel + " (Esc)";
+        BtnPin.ToolTip = Strings.ActionPin + " (P)";
+        BtnOcr.ToolTip = Strings.ActionOcr + " (T)";
+        BtnQr.ToolTip = Strings.ActionQr + " (Q)";
 
         // Frozen screenshot for this monitor.
         var local = monitor.Bounds.Intersect(shot.Bounds).Offset(-shot.OriginX, -shot.OriginY);
@@ -87,6 +90,7 @@ public partial class OverlayWindow : Window
         MouseMove += OnMouseMove;
         MouseLeftButtonUp += OnMouseUp;
         MouseRightButtonUp += (_, e) => { e.Handled = true; _session.RightClick(); };
+        MouseWheel += (_, e) => { _session.Wheel(e.Delta); e.Handled = true; };
         LostMouseCapture += (_, _) => _session.MouseCaptureLost();
     }
 
@@ -162,6 +166,9 @@ public partial class OverlayWindow : Window
     private void OnSaveAs(object sender, RoutedEventArgs e) => _session.Finish(CaptureOutcome.SaveAs);
     private void OnCancel(object sender, RoutedEventArgs e) => _session.Finish(CaptureOutcome.Cancel);
     private void OnFullScreen(object sender, RoutedEventArgs e) => _session.FullScreen(Monitor);
+    private void OnPin(object sender, RoutedEventArgs e) => _session.Finish(CaptureOutcome.Pin);
+    private void OnOcr(object sender, RoutedEventArgs e) => _session.Finish(CaptureOutcome.Ocr);
+    private void OnQr(object sender, RoutedEventArgs e) => _session.Finish(CaptureOutcome.Qr);
     private void OnAllScreens(object sender, RoutedEventArgs e) => _session.Finish(CaptureOutcome.AllScreens);
 
     // ---------------- rendering ----------------
@@ -214,9 +221,38 @@ public partial class OverlayWindow : Window
         }
         else
         {
-            Dim.Data = full;
             SelBorder.Visibility = Visibility.Collapsed;
             foreach (var r in _handles) r.Visibility = Visibility.Collapsed;
+            // no selection yet: light up the window / element a click would select
+            if (s.Hover is PxRect hv && !hv.Intersect(Monitor.Bounds).IsEmpty)
+            {
+                Rect hr = ToLocal(hv);
+                var group = new GeometryGroup { FillRule = FillRule.EvenOdd };
+                group.Children.Add(full);
+                group.Children.Add(new RectangleGeometry(hr));
+                Dim.Data = group;
+            }
+            else
+            {
+                Dim.Data = full;
+            }
+        }
+
+        if (s.Hover is PxRect hover && !hover.Intersect(Monitor.Bounds).IsEmpty)
+        {
+            Rect hr = ToLocal(hover);
+            double t = 2 * onePx;
+            HoverBorder.Visibility = Visibility.Visible;
+            HoverBorder.StrokeThickness = t;
+            HoverBorder.StrokeDashArray = s.HoverIsElement ? null : new DoubleCollection { 4, 3 };
+            Canvas.SetLeft(HoverBorder, hr.X);
+            Canvas.SetTop(HoverBorder, hr.Y);
+            HoverBorder.Width = Math.Max(0, hr.Width);
+            HoverBorder.Height = Math.Max(0, hr.Height);
+        }
+        else
+        {
+            HoverBorder.Visibility = Visibility.Collapsed;
         }
 
         // ---- size label (on the monitor holding the selection's top-left) ----
@@ -230,6 +266,19 @@ public partial class OverlayWindow : Window
             double lx = Math.Clamp(sel.X, 4, Math.Max(4, w - ls.Width - 4));
             double ly = sel.Y - ls.Height - 6;
             if (ly < 4) ly = sel.Y + 6;
+            Canvas.SetLeft(SizeLabel, lx);
+            Canvas.SetTop(SizeLabel, ly);
+        }
+        else if (s.Hover is PxRect hl && (Monitor.Bounds.Contains(hl.X, hl.Y) || (!hl.Intersect(Monitor.Bounds).IsEmpty && !s.AnyMonitorContains(hl.X, hl.Y))))
+        {
+            Rect r = ToLocal(hl);
+            SizeText.Text = $"{hl.Width} × {hl.Height}";
+            SizeLabel.Visibility = Visibility.Visible;
+            SizeLabel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            var ls = SizeLabel.DesiredSize;
+            double lx = Math.Clamp(r.X, 4, Math.Max(4, w - ls.Width - 4));
+            double ly = r.Y - ls.Height - 6;
+            if (ly < 4) ly = Math.Max(4, r.Y + 6);
             Canvas.SetLeft(SizeLabel, lx);
             Canvas.SetTop(SizeLabel, ly);
         }

@@ -4,7 +4,7 @@
         xmlns:ed="clr-namespace:Freezia.Editor"
         Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}"
         FontFamily="{StaticResource UiFont}" FontSize="13"
-        MinWidth="980" MinHeight="560" Width="1200" Height="800"
+        MinWidth="1100" MinHeight="560" Width="1200" Height="800"
         UseLayoutRounding="True" TextOptions.TextFormattingMode="Display"
         Icon="pack://application:,,,/Freezia;component/Assets/app.ico">
     <Window.Resources>
@@ -152,6 +152,12 @@
                     <Button x:Name="ClearAllButton" Style="{StaticResource IconButton}" Click="OnClearAll">
                         <Path Style="{StaticResource ToolIcon}" Data="M3,4.5 H17 V15.5 H3 Z M7.5,7.5 L12.5,12.5 M12.5,7.5 L7.5,12.5" />
                     </Button>
+                    <Border Style="{StaticResource ToolSeparator}" Margin="8,8" />
+                    <Button x:Name="PinButton" Style="{StaticResource IconButton}" Content="&#xE718;" Click="OnPin" />
+                    <Button x:Name="OcrButton" Style="{StaticResource IconButton}" Click="OnOcr">
+                        <Path Style="{StaticResource ToolIcon}" Data="M3,7 V3 H7 M13,3 H17 V7 M17,13 V17 H13 M7,17 H3 V13 M7,7.5 H13 M10,7.5 V13.5" />
+                    </Button>
+                    <Button x:Name="QrButton" Style="{StaticResource IconButton}" Content="&#xED14;" Click="OnQr" />
                     <Border Style="{StaticResource ToolSeparator}" Margin="8,8" />
                     <Button x:Name="CopyButton" Click="OnCopy" Padding="12,7" Margin="0,0,6,0">
                         <StackPanel Orientation="Horizontal">

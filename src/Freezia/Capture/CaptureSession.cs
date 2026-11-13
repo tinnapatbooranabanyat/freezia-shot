@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
+using System.Windows.Threading;
+using Freezia.Native;
 using System.Windows.Input;
 using Freezia.Core;
 
@@ -17,6 +20,12 @@ public enum CaptureOutcome
     FullScreen,
     /// <summary>All monitors (from A / "ทุกจอ").</summary>
     AllScreens,
+    /// <summary>Float the selection on screen (P).</summary>
+    Pin,
+    /// <summary>Read text in the selection (T).</summary>
+    Ocr,
+    /// <summary>Read QR codes / barcodes in the selection (Q).</summary>
+    Qr,
 }
 
 public enum DragMode
@@ -60,10 +69,134 @@ public sealed class CaptureSession
     /// <summary>Raised once. The image is null when cancelled.</summary>
     public event Action<CaptureOutcome, PixelImage?>? Finished;
 
-    public CaptureSession(PixelImage shot, List<MonitorInfo> monitors)
+    public CaptureSession(PixelImage shot, List<MonitorInfo> monitors, List<WindowRegion>? windows = null)
     {
         Shot = shot;
         _monitors = monitors;
+        _windows = windows ?? new List<WindowRegion>();
+    }
+
+    // ---------------- hover: window / UI element under the mouse ----------------
+
+    private readonly List<WindowRegion> _windows;
+    private List<PxRect> _hoverChain = new();
+    private int _hoverLevel;
+    private IntPtr _hoverHwnd;
+    private bool _hoverIsElement;
+    private CancellationTokenSource? _elementCts;
+    private bool _elementBusy;
+    private DispatcherTimer? _ctrlTimer;
+    private PxRect? _clickHover;
+    private bool _lastCtrl;
+
+    /// <summary>Rectangle a single click would select (window, UI element or monitor).</summary>
+    public PxRect? Hover => _hoverChain.Count > 0 && !HasSelection && Mode == DragMode.None
+        ? _hoverChain[Math.Clamp(_hoverLevel, 0, _hoverChain.Count - 1)]
+        : null;
+
+    public bool HoverIsElement => _hoverIsElement;
+
+    private static bool CtrlDown => (NativeMethods.GetAsyncKeyState(0x11) & 0x8000) != 0;
+
+    private PxRect Clip(PxRect r) => r.Intersect(Shot.Bounds);
+
+    /// <summary>Plain hover = whole window; Ctrl held = the UI element under the mouse.</summary>
+    private void UpdateHover(int x, int y)
+    {
+        bool ctrl = CtrlDown;
+        _lastCtrl = ctrl;
+        var win = WindowFinder.At(_windows, x, y);
+        if (win == null)
+        {
+            // desktop / no window: the monitor under the mouse
+            var mon = MonitorAt(x, y);
+            _hoverChain = mon != null ? new List<PxRect> { mon.Bounds } : new List<PxRect>();
+            _hoverLevel = 0;
+            _hoverHwnd = IntPtr.Zero;
+            _hoverIsElement = false;
+            return;
+        }
+
+        var winRect = Clip(win.Rect);
+        if (!ctrl)
+        {
+            _elementCts?.Cancel();
+            _hoverChain = new List<PxRect> { winRect };
+            _hoverLevel = 0;
+            _hoverHwnd = win.Hwnd;
+            _hoverIsElement = false;
+            return;
+        }
+
+        // Ctrl: keep the current element chain while the mouse stays inside its deepest rectangle
+        bool stillInside = _hoverIsElement && _hoverHwnd == win.Hwnd && _hoverChain.Count > 1 && _hoverChain[^1].Contains(x, y);
+        if (stillInside) return;
+        if (!_hoverIsElement || _hoverHwnd != win.Hwnd)
+        {
+            _hoverChain = new List<PxRect> { winRect };
+            _hoverLevel = 0;
+        }
+        _hoverHwnd = win.Hwnd;
+        _hoverIsElement = true;
+        QueryElement(win.Hwnd, x, y, winRect);
+    }
+
+    private async void QueryElement(IntPtr hwnd, int x, int y, PxRect winRect)
+    {
+        if (_elementBusy) return; // one query at a time; the next mouse move asks again
+        _elementBusy = true;
+        _elementCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _elementCts = cts;
+        try
+        {
+            var chain = await WindowFinder.ElementChainAsync(hwnd, x, y, cts.Token);
+            if (_finished || cts.IsCancellationRequested || _hoverHwnd != hwnd || !_hoverIsElement) return;
+            var full = new List<PxRect> { winRect };
+            foreach (var r in chain)
+            {
+                var c = Clip(r);
+                if (!c.IsEmpty && c != full[^1]) full.Add(c);
+            }
+            _hoverChain = full;
+            _hoverLevel = full.Count - 1;
+            RefreshAll();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _elementBusy = false;
+        }
+        // the mouse may have moved on while we were busy
+        if (!_finished && _hoverIsElement && Hover is PxRect h && !h.Contains(Cursor.X, Cursor.Y))
+        {
+            UpdateHover(Cursor.X, Cursor.Y);
+            RefreshAll();
+        }
+    }
+
+    /// <summary>Mouse wheel over a hovered element: up = parent (bigger), down = child (smaller).</summary>
+    internal void Wheel(int delta)
+    {
+        if (_finished || HasSelection || _hoverChain.Count < 2) return;
+        _hoverLevel = Math.Clamp(_hoverLevel + (delta > 0 ? -1 : 1), 0, _hoverChain.Count - 1);
+        RefreshAll();
+    }
+
+    /// <summary>Pressing / releasing Ctrl without moving the mouse also switches window ↔ element.</summary>
+    private void StartCtrlWatch()
+    {
+        _ctrlTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
+        _ctrlTimer.Tick += (_, _) =>
+        {
+            if (_finished || HasSelection || Mode != DragMode.None) return;
+            if (CtrlDown == _lastCtrl) return;
+            UpdateHover(Cursor.X, Cursor.Y);
+            RefreshAll();
+        };
+        _ctrlTimer.Start();
     }
 
     public void Show()
@@ -77,6 +210,8 @@ public sealed class CaptureSession
         }
         var target = _overlays.FirstOrDefault(o => o.Monitor.Bounds.Contains(Cursor.X, Cursor.Y)) ?? _overlays.FirstOrDefault();
         target?.FocusOverlay();
+        UpdateHover(Cursor.X, Cursor.Y);
+        StartCtrlWatch();
         RefreshAll();
     }
 
@@ -97,6 +232,8 @@ public sealed class CaptureSession
         LabelMonitor = MonitorAt(Selection.X, Selection.Y) ?? Largest();
         ActionMonitor = MonitorAt(Selection.Right - 1, Selection.Bottom - 1) ?? Largest();
     }
+
+    internal bool AnyMonitorContains(int x, int y) => MonitorAt(x, y) != null;
 
     private MonitorInfo? MonitorAt(int x, int y) => _monitors.FirstOrDefault(m => m.Bounds.Contains(x, y));
 
@@ -139,6 +276,7 @@ public sealed class CaptureSession
         }
         else
         {
+            _clickHover = Hover;
             Mode = DragMode.Creating;
             Selection = new PxRect(x, y, 1, 1);
         }
@@ -180,6 +318,7 @@ public sealed class CaptureSession
                 break;
             default:
                 UpdateCursorShape(x, y);
+                if (!HasSelection) UpdateHover(x, y);
                 break;
         }
         RefreshAll();
@@ -190,7 +329,12 @@ public sealed class CaptureSession
         if (_finished) return;
         if (Mode != DragMode.None) MouseMove(x, y, shift);
         if (Mode == DragMode.Creating && Selection.Width <= 3 && Selection.Height <= 3)
-            Selection = default; // a click, not a drag
+        {
+            // a click, not a drag: select the highlighted window / element
+            Mode = DragMode.None;
+            Selection = default;
+            if (_clickHover is PxRect h && !h.IsEmpty) Selection = h;
+        }
         Mode = DragMode.None;
         _handle = SelectionHandle.None;
         UpdateCursorShape(Cursor.X, Cursor.Y);
@@ -302,6 +446,15 @@ public sealed class CaptureSession
             case 0x46: // F
                 FullScreen(Monitors.FromCursor());
                 break;
+            case 0x50: // P
+                if (HasSelection) Finish(CaptureOutcome.Pin);
+                break;
+            case 0x54: // T
+                if (HasSelection) Finish(CaptureOutcome.Ocr);
+                break;
+            case 0x51: // Q
+                if (HasSelection) Finish(CaptureOutcome.Qr);
+                break;
             case 0x41: // A
                 Finish(CaptureOutcome.AllScreens);
                 break;
@@ -376,6 +529,8 @@ public sealed class CaptureSession
             try { o.Close(); } catch { /* ignore */ }
         }
         _overlays.Clear();
+        _ctrlTimer?.Stop();
+        _elementCts?.Cancel();
         Finished?.Invoke(outcome, result);
     }
 }

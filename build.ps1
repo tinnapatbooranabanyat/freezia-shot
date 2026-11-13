@@ -51,10 +51,28 @@ if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
 
 $exe = Join-Path $publish 'Freezia.exe'
 if (-not (Test-Path $exe)) { throw "Publish output missing: $exe" }
+$extra = Get-ChildItem $publish -Recurse -File | Where-Object { $_.Name -ne 'Freezia.exe' }
+if ($extra) { throw "Single-file publish left extra files: $($extra.Name -join ', ')" }
 $sizeMb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
 Write-Host "Published: $exe ($sizeMb MB)" -ForegroundColor Green
 
 if ($SkipInstaller) { return }
+
+# ---- Microsoft Visual C++ Redistributable (needed by the OCR engine), cached in installer\redist ----
+$redistDir = Join-Path $root 'installer\redist'
+$redist = Join-Path $redistDir 'vc_redist.x64.exe'
+if (-not (Test-Path $redist)) {
+    Step 'Downloading Microsoft Visual C++ Redistributable (x64)'
+    New-Item -ItemType Directory -Force $redistDir | Out-Null
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Invoke-WebRequest 'https://aka.ms/vs/17/release/vc_redist.x64.exe' -OutFile $redist -UseBasicParsing
+}
+$sig = Get-AuthenticodeSignature $redist
+if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
+    Remove-Item $redist -Force
+    throw "vc_redist.x64.exe is not validly signed by Microsoft ($($sig.Status)); deleted, run build.ps1 again"
+}
+Write-Host "VC++ redistributable: $redist (signed by Microsoft)"
 
 # ---- find Inno Setup ----
 Step 'Building installer (Inno Setup)'
@@ -79,7 +97,7 @@ Write-Host "Using $iscc"
 $stage = Join-Path $env:TEMP "freezia-setup-build"
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Force $stage | Out-Null
-& $iscc "/O$stage" "/DAppVersion=$version" "/DPublishDir=$publish" $iss
+& $iscc "/O$stage" "/DAppVersion=$version" "/DPublishDir=$publish" "/DRedistDir=$redistDir" $iss
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed ($LASTEXITCODE)" }
 
 $setup = Join-Path $artifacts "Freezia-Setup-$version.exe"

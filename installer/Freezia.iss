@@ -6,6 +6,9 @@
 #ifndef AppVersion
   #define AppVersion "1.0.0"
 #endif
+#ifndef RedistDir
+  #define RedistDir "redist"
+#endif
 #ifndef PublishDir
   #define PublishDir "..\artifacts\publish"
 #endif
@@ -62,6 +65,8 @@ thai.StartWithWindows=เปิด Freezia อัตโนมัติเมื�
 english.StartWithWindows=Start Freezia when I sign in to Windows
 thai.OtherOptions=ตัวเลือกเพิ่มเติม:
 english.OtherOptions=Other options:
+thai.InstallingVCRedist=กำลังติดตั้ง Microsoft Visual C++ Runtime (ใช้สำหรับ OCR)…
+english.InstallingVCRedist=Installing the Microsoft Visual C++ Runtime (used for OCR)…
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
@@ -70,6 +75,8 @@ Name: "startup"; Description: "{cm:StartWithWindows}"; GroupDescription: "{cm:Ot
 [Files]
 ; Self-contained single-file build: no .NET runtime needed on the target PC.
 Source: "{#PublishDir}\{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
+; Microsoft Visual C++ 2015-2022 runtime for the OCR engine: only unpacked when the PC doesn't have it
+Source: "{#RedistDir}\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: VCRedistNeeded
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"
@@ -84,6 +91,8 @@ Root: HKCU; Subkey: "{#RunKey}"; ValueType: string; ValueName: "{#AppName}"; \
 Root: HKCU; Subkey: "Software\{#AppName}"; ValueType: string; ValueName: "InstallerLanguage"; ValueData: "{language}";     Flags: uninsdeletekey
 
 [Run]
+Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /passive /norestart"; StatusMsg: "{cm:InstallingVCRedist}"; \
+    Flags: waituntilterminated; Check: VCRedistNeeded
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
@@ -130,6 +139,17 @@ begin
 
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM {#AppExe}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Sleep(500);
+end;
+
+{ True when the VC++ 2015-2022 x64 runtime is missing or older than 14.40 (the OCR DLLs need it). }
+function VCRedistNeeded(): Boolean;
+var
+  Installed, Minor: Cardinal;
+begin
+  Result := not (RegQueryDWordValue(HKLM64, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64', 'Installed', Installed)
+                 and (Installed = 1)
+                 and RegQueryDWordValue(HKLM64, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64', 'Minor', Minor)
+                 and (Minor >= 40));
 end;
 
 function InitializeSetup(): Boolean;

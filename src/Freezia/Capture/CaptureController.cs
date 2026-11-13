@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
@@ -33,8 +34,10 @@ public sealed class CaptureController
     {
         if (IsBusy) return;
         PixelImage shot;
+        System.Collections.Generic.List<WindowRegion> windows;
         try
         {
+            windows = WindowFinder.Snapshot(); // before the overlay covers everything
             shot = ScreenCapture.CaptureVirtualScreen();
         }
         catch (Exception ex)
@@ -44,7 +47,7 @@ public sealed class CaptureController
             return;
         }
 
-        var session = new CaptureSession(shot, Monitors.GetAll());
+        var session = new CaptureSession(shot, Monitors.GetAll(), windows);
         _session = session;
         session.Finished += OnSessionFinished;
         _hotkeys.SetCaptureHandler(session.HandleKey);
@@ -108,6 +111,9 @@ public sealed class CaptureController
             case CaptureOutcome.AllScreens:
                 HandleFullCapture(image);
                 break;
+            case CaptureOutcome.Pin: Pin(image, atCapturePosition: true); break;
+            case CaptureOutcome.Ocr: Ocr(image); break;
+            case CaptureOutcome.Qr: ReadCodes(image); break;
         }
     }
 
@@ -208,6 +214,68 @@ public sealed class CaptureController
             Logger.Error("Save As failed", ex);
             ToastWindow.ShowToast(Strings.ToastSaveFailed, ex.Message, error: true);
             return null;
+        }
+    }
+
+    // ---------------- pin / OCR / QR ----------------
+
+    /// <summary>Float an image above all windows (at the place it was captured, or centered).</summary>
+    public void Pin(PixelImage image, bool atCapturePosition)
+    {
+        var pin = new PinWindow(image, img => Edit(img), img => Copy(img.Source), img => Save(img.Source));
+        if (atCapturePosition) pin.ShowAt(image.OriginX - 1, image.OriginY - 1);
+        else pin.ShowCentered();
+    }
+
+    public async void Ocr(PixelImage image)
+    {
+        var win = new TextResultWindow(Strings.OcrTitle, image.Source);
+        win.ShowBusy(Strings.OcrBusy);
+        win.ShowAndActivate();
+        try
+        {
+            string text = await OcrService.RecognizeAsync(image);
+            if (text.Length == 0) win.ShowResult(Strings.OcrNoText, "");
+            else
+            {
+                win.ShowResult(string.Format(Strings.OcrDone, text.Length), text);
+                ToastWindow.ShowToast(Strings.TextCopied);
+            }
+        }
+        catch (OcrService.MissingRuntimeException)
+        {
+            win.ShowError(Strings.OcrMissingRuntime);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("OCR failed", ex);
+            win.ShowError(Strings.OcrFailed + "\n" + ex.Message);
+        }
+    }
+
+    public async void ReadCodes(PixelImage image)
+    {
+        var win = new TextResultWindow(Strings.QrTitle, image.Source);
+        win.ShowBusy(Strings.QrBusy);
+        win.ShowAndActivate();
+        try
+        {
+            var codes = await QrService.ReadAsync(image);
+            if (codes.Count == 0)
+            {
+                win.ShowResult(Strings.QrNone, "");
+                return;
+            }
+            string text = string.Join(Environment.NewLine + Environment.NewLine, codes.Select(c => c.Text));
+            string? link = codes.Select(c => c.Text.Trim()).FirstOrDefault(QrService.IsLink);
+            string formats = string.Join(", ", codes.Select(c => c.Format).Distinct());
+            win.ShowResult(string.Format(Strings.QrFound, codes.Count, formats), text, link);
+            ToastWindow.ShowToast(Strings.TextCopied);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("QR read failed", ex);
+            win.ShowError(Strings.QrFailed + "\n" + ex.Message);
         }
     }
 

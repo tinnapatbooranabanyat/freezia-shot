@@ -10,6 +10,7 @@
         <Path x:Name="Dim" Fill="#99000000" IsHitTestVisible="False" />
 
         <Canvas x:Name="Layer" ClipToBounds="True">
+            <Rectangle x:Name="HoverBorder" Stroke="{DynamicResource AccentBrush}" Visibility="Collapsed" IsHitTestVisible="False" />
             <Rectangle x:Name="SelBorder" Stroke="{DynamicResource AccentBrush}" StrokeThickness="1"
                        Visibility="Collapsed" IsHitTestVisible="False" />
             <Canvas x:Name="Handles" IsHitTestVisible="False" />
@@ -58,6 +59,14 @@
                             Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource AccentForegroundBrush}" Margin="2,0" />
                     <Button x:Name="BtnSave" Style="{StaticResource IconButton}" Content="&#xE74E;" Click="OnSave" />
                     <Button x:Name="BtnSaveAs" Style="{StaticResource IconButton}" Content="&#xE792;" Click="OnSaveAs" />
+                    <Border Style="{StaticResource ToolSeparator}" Margin="4,6" />
+                    <Button x:Name="BtnPin" Style="{StaticResource IconButton}" Content="&#xE718;" Click="OnPin" />
+                    <Button x:Name="BtnOcr" Style="{StaticResource IconButton}" Click="OnOcr">
+                        <Path Width="17" Height="17" Stretch="Uniform" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                              StrokeLineJoin="Round" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                              Data="M3,7 V3 H7 M13,3 H17 V7 M17,13 V17 H13 M7,17 H3 V13 M7,7.5 H13 M10,7.5 V13.5" />
+                    </Button>
+                    <Button x:Name="BtnQr" Style="{StaticResource IconButton}" Content="&#xED14;" Click="OnQr" />
                     <Border Style="{StaticResource ToolSeparator}" Margin="4,6" />
                     <Button x:Name="BtnCancel" Style="{StaticResource IconButton}" Content="&#xE711;" Click="OnCancel" />
                 </StackPanel>
