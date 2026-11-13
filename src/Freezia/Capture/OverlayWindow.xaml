@@ -55,7 +55,7 @@
                 <StackPanel Orientation="Horizontal">
                     <Button x:Name="BtnEdit" Style="{StaticResource IconButton}" Content="&#xE70F;" Click="OnEdit" />
                     <Button x:Name="BtnCopy" Style="{StaticResource IconButton}" Content="&#xE8C8;" Click="OnCopy"
-                            Background="{DynamicResource AccentBrush}" Foreground="White" Margin="2,0" />
+                            Background="{DynamicResource AccentBrush}" Foreground="{DynamicResource AccentForegroundBrush}" Margin="2,0" />
                     <Button x:Name="BtnSave" Style="{StaticResource IconButton}" Content="&#xE74E;" Click="OnSave" />
                     <Button x:Name="BtnSaveAs" Style="{StaticResource IconButton}" Content="&#xE792;" Click="OnSaveAs" />
                     <Border Style="{StaticResource ToolSeparator}" Margin="4,6" />

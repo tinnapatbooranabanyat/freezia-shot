@@ -57,6 +57,7 @@ public partial class App : Application
         if (Settings.IsFirstRun) ApplyInstallerLanguage();
         Loc.Set(Settings.Current.Language);
         ThemeManager.Apply(Settings.Current.Theme);
+        ThemeManager.SetAccent(ParseAccent(Settings.Current.AccentColor));
 
         _instance.Listen(
             // launching Freezia again while it runs opens the settings window
@@ -87,8 +88,12 @@ public partial class App : Application
             _hotkeys?.SetBindings(Settings.Current);
             Loc.Set(Settings.Current.Language);
             ThemeManager.Apply(Settings.Current.Theme);
+            ThemeManager.SetAccent(ParseAccent(Settings.Current.AccentColor));
         };
     }
+
+    public static System.Windows.Media.Color? ParseAccent(string? hex) =>
+        Freezia.Editor.ColorUtil.TryParse(hex, out var c) ? c : null;
 
     /// <summary>
     /// First run: use the language chosen in the installer (written to HKCU\Software\Freezia by Setup).

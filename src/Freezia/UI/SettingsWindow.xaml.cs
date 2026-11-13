@@ -1,5 +1,8 @@
 using System;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using Freezia.Editor;
 using Freezia.Core;
 
 namespace Freezia.UI;
@@ -23,6 +26,14 @@ public partial class SettingsWindow : Window
         ThemeDark.IsChecked = _edit.Theme == AppTheme.Dark;
         ThemeLight.IsChecked = _edit.Theme == AppTheme.Light;
         ThemeSystem.IsChecked = _edit.Theme == AppTheme.System;
+        _originalAccent = ThemeManager.Accent;
+        _accent = ThemeManager.Accent;
+        BuildAccentSwatches();
+        AccentPicker.ShowAlpha = false;
+        AccentPicker.ShowImageTools = false;
+        AccentPicker.ColorChanged += c => PreviewAccent(c);
+        AccentPicker.Committed += c => { PreviewAccent(c); AccentPopup.IsOpen = false; };
+        AccentPicker.Cancelled += () => { PreviewAccent(_accentBeforePicker); AccentPopup.IsOpen = false; };
         _ready = true;
 
         ApplyLanguage();
@@ -72,6 +83,7 @@ public partial class SettingsWindow : Window
             {
                 Loc.Set(_originalLanguage);
                 ThemeManager.Apply(_originalTheme);
+                ThemeManager.SetAccent(_originalAccent);
             }
         };
     }
@@ -110,6 +122,9 @@ public partial class SettingsWindow : Window
         AppearanceHeader.Text = Strings.SettingsAppearance;
         LblLanguage.Text = Strings.SettingsLanguage;
         LblTheme.Text = Strings.SettingsTheme;
+        LblAccent.Text = Strings.SettingsAccent;
+        AccentHint.Text = Strings.SettingsAccentHint;
+        if (AccentPanel.Children.Count > 0) BuildAccentSwatches();
         ThemeDark.Content = Strings.ThemeDark;
         ThemeLight.Content = Strings.ThemeLight;
         ThemeSystem.Content = Strings.ThemeSystem;
@@ -130,6 +145,87 @@ public partial class SettingsWindow : Window
     {
         if (!_ready) return;
         ThemeManager.Apply(SelectedTheme);
+    }
+
+    // ---------------- accent color ----------------
+
+    private readonly Color? _originalAccent;
+    private Color? _accent;
+    private Color? _accentBeforePicker;
+    private RadioButton? _customSwatch;
+
+    private void BuildAccentSwatches()
+    {
+        AccentPanel.Children.Clear();
+        bool matched = false;
+        foreach (var (th, en, color) in ThemeManager.AccentPresets)
+        {
+            // the default blue is shown as the dark palette's blue
+            var shown = color ?? Color.FromRgb(0x5B, 0x8C, 0xFF);
+            var rb = new RadioButton
+            {
+                Style = (Style)FindResource("AccentSwatch"),
+                GroupName = "accent",
+                Background = new SolidColorBrush(shown),
+                ToolTip = Loc.Language == AppLanguage.English ? en : th,
+                IsChecked = color == _accent,
+            };
+            matched |= color == _accent;
+            var c = color;
+            rb.Checked += (_, _) => { if (_ready) PreviewAccent(c); };
+            AccentPanel.Children.Add(rb);
+        }
+
+        // custom: shows the custom color, or a rainbow when none is set
+        Brush customFill = !matched && _accent is Color ac
+            ? new SolidColorBrush(ac)
+            : new LinearGradientBrush(new GradientStopCollection
+            {
+                new GradientStop(Color.FromRgb(0xFF, 0x3B, 0x30), 0),
+                new GradientStop(Color.FromRgb(0xFF, 0xCC, 0x00), 0.33),
+                new GradientStop(Color.FromRgb(0x34, 0xC7, 0x59), 0.66),
+                new GradientStop(Color.FromRgb(0x00, 0x7A, 0xFF), 1),
+            }, 45);
+        var plus = new System.Windows.Shapes.Path
+        {
+            Data = Geometry.Parse("M0,5 H10 M5,0 V10"),
+            Stroke = Brushes.White,
+            StrokeThickness = 1.8,
+            Width = 10,
+            Height = 10,
+            IsHitTestVisible = false,
+        };
+        _customSwatch = new RadioButton
+        {
+            Style = (Style)FindResource("AccentSwatch"),
+            GroupName = "accent",
+            Background = customFill,
+            ToolTip = Strings.AccentCustom,
+            IsChecked = !matched,
+            Content = matched ? plus : null,
+        };
+        _customSwatch.Click += (_, _) => OpenAccentPicker();
+        AccentPanel.Children.Add(_customSwatch);
+    }
+
+    private void OpenAccentPicker()
+    {
+        _accentBeforePicker = _accent;
+        AccentPopup.PlacementTarget = _customSwatch;
+        AccentPicker.Begin(_accent ?? Color.FromRgb(0x5B, 0x8C, 0xFF), Strings.SettingsAccent);
+        AccentPopup.IsOpen = true;
+    }
+
+    /// <summary>Live preview of an accent (null = default blue); saved on OK, restored on Cancel.</summary>
+    private void PreviewAccent(Color? c)
+    {
+        _accent = c;
+        ThemeManager.SetAccent(c);
+        if (_customSwatch != null && c is Color cc && Array.TrueForAll(ThemeManager.AccentPresets, p => p.Color != cc))
+        {
+            _customSwatch.Background = new SolidColorBrush(cc);
+            _customSwatch.Content = null;
+        }
     }
 
     private AppTheme SelectedTheme =>
@@ -241,6 +337,7 @@ public partial class SettingsWindow : Window
 
         _edit.Language = LangEn.IsChecked == true ? AppLanguage.English : AppLanguage.Thai;
         _edit.Theme = SelectedTheme;
+        _edit.AccentColor = _accent is Color accent ? ColorUtil.ToHex6(accent) : null;
 
         bool startup = StartupToggle.IsChecked == true;
         _edit.StartWithWindows = startup;

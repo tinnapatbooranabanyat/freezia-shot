@@ -35,6 +35,9 @@ public sealed class AppSettings
     public AppLanguage Language { get; set; } = AppLanguage.Thai;
     public AppTheme Theme { get; set; } = AppTheme.Dark;
 
+    /// <summary>UI accent color "#RRGGBB" (buttons, selection, highlights). Null = default blue.</summary>
+    public string? AccentColor { get; set; }
+
     public EditorSettings Editor { get; set; } = new();
 }
 

@@ -167,7 +167,7 @@
                     </Button>
                     <Button x:Name="SaveButton" Click="OnSave" Style="{StaticResource AccentButton}" Padding="14,7">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="&#xE74E;" Foreground="White" />
+                            <TextBlock Style="{StaticResource IconText}" FontSize="14" Text="&#xE74E;" Foreground="{DynamicResource AccentForegroundBrush}" />
                             <TextBlock x:Name="SaveText" Margin="8,0,0,0" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>

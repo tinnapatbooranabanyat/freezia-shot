@@ -119,6 +119,10 @@ public static class Strings
     public static string SettingsAppearance => T("รูปลักษณ์", "Appearance");
     public static string SettingsLanguage => T("ภาษา", "Language");
     public static string SettingsTheme => T("ธีม", "Theme");
+    public static string SettingsAccent => T("สีหลัก", "Accent color");
+    public static string SettingsAccentHint => T("ชุดสีของปุ่ม กรอบเลือก และไฮไลต์ทั้งโปรแกรม ใช้ได้ทั้งธีมมืดและสว่าง",
+                                                 "Color of buttons, selections and highlights across the app, in both dark and light themes");
+    public static string AccentCustom => T("กำหนดสีเอง…", "Custom color…");
     public static string ThemeDark => T("มืด", "Dark");
     public static string ThemeLight => T("สว่าง", "Light");
     public static string ThemeSystem => T("ตามระบบ", "System");

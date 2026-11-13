@@ -75,6 +75,29 @@ public partial class ColorPicker : UserControl
 
     public void SetTitle(string title) => TitleText.Text = title;
 
+    /// <summary>Show the opacity bar and box (off for opaque-only colors such as the UI accent).</summary>
+    public bool ShowAlpha
+    {
+        set
+        {
+            var v = value ? Visibility.Visible : Visibility.Collapsed;
+            AlphaArea.Visibility = v;
+            AlphaLabel.Visibility = v;
+            AlphaBox.Visibility = v;
+        }
+    }
+
+    /// <summary>Show the eyedropper and "save color" buttons (only meaningful in the editor).</summary>
+    public bool ShowImageTools
+    {
+        set
+        {
+            var v = value ? Visibility.Visible : Visibility.Collapsed;
+            EyedropperButton.Visibility = v;
+            SaveColorButton.Visibility = v;
+        }
+    }
+
     private void OnSaveColorClick(object sender, RoutedEventArgs e) => SaveRequested?.Invoke(Color);
 
     public Color Color => ColorUtil.FromHsv(_h, _s, _v, _a);
