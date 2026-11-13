@@ -76,7 +76,9 @@ public static class Strings
     public const string SaveAs = "บันทึกเป็น… (Ctrl+Shift+S)";
     public const string PresetColors = "สีสำเร็จรูป";
     public const string RecentColors = "สีที่ใช้ล่าสุด";
-    public const string UnsavedClose = "ภาพนี้ยังไม่ได้บันทึกหรือคัดลอก ต้องการปิดหรือไม่?";
+    public const string UnsavedClose = "ภาพที่แก้ไขยังไม่ได้บันทึกหรือคัดลอก ต้องการปิดหน้าต่างนี้หรือไม่?";
+    public const string UnsavedCloseYes = "ปิดโดยไม่บันทึก";
+    public const string UnsavedCloseNo = "กลับไปแก้ไข";
 
     // Color picker
     public const string PickerTitle = "เลือกสี";

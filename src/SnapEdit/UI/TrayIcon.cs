@@ -90,7 +90,7 @@ public sealed class TrayIcon : IDisposable
     {
         try
         {
-            var uri = new Uri("pack://application:,,,/Assets/app.ico");
+            var uri = new Uri("pack://application:,,,/SnapEdit;component/Assets/app.ico");
             var info = System.Windows.Application.GetResourceStream(uri);
             if (info != null)
             {

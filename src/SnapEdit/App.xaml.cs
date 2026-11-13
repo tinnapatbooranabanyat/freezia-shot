@@ -75,6 +75,7 @@ public partial class App : Application
             ToastWindow.ShowToast(Strings.HotkeyHookFailed, error: true);
 
         _capture = new CaptureController(Settings, _hotkeys);
+        _capture.OpenEditor = OpenEditor;
 
         Settings.Changed += (_, _) =>
         {
@@ -103,6 +104,22 @@ public partial class App : Application
     public void CaptureScreen() => _capture?.CaptureScreen();
 
     public void CaptureAllScreens() => _capture?.CaptureAllScreens();
+
+    private void OpenEditor(PixelImage image)
+    {
+        try
+        {
+            var editor = new SnapEdit.Editor.EditorWindow(image, _capture!, Settings);
+            editor.Show();
+            SnapEdit.Native.NativeMethods.ForceForeground(new System.Windows.Interop.WindowInteropHelper(editor).Handle);
+            editor.Activate();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Editor failed to open", ex);
+            ToastWindow.ShowToast(Strings.ErrorTitle, ex.Message, error: true);
+        }
+    }
 
     public void OpenSaveFolder()
     {
