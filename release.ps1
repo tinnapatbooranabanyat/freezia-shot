@@ -14,6 +14,15 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
+# git writes progress to stderr; in Windows PowerShell that must not count as an error
+function Invoke-Git {
+    $eap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { & git @args 2>&1 | ForEach-Object { "$_" } | Out-Host }
+    finally { $ErrorActionPreference = $eap }
+    if ($LASTEXITCODE -ne 0) { throw "git $($args -join ' ') failed ($LASTEXITCODE)" }
+}
+
 if ($Version -notmatch '^\d+\.\d+\.\d+$') { throw "Version must look like 1.2.3 (got '$Version')" }
 $tag = "v$Version"
 
@@ -21,7 +30,7 @@ $tag = "v$Version"
 $branch = (git rev-parse --abbrev-ref HEAD).Trim()
 if ($branch -ne 'main') { throw "Release from the main branch (current: $branch)" }
 if (git status --porcelain) { throw 'There are uncommitted changes: commit or stash them first' }
-git fetch --tags --quiet origin
+Invoke-Git fetch --tags --quiet origin
 if (git tag --list $tag) { throw "Tag $tag already exists" }
 
 $csproj = 'src\Freezia\Freezia.csproj'
@@ -35,12 +44,11 @@ if ([version]$Version -le [version]$old) { throw "New version $Version must be h
 $text = $text.Remove($m.Groups[1].Index, $m.Groups[1].Length).Insert($m.Groups[1].Index, $Version)
 [IO.File]::WriteAllText($csproj, $text, (New-Object Text.UTF8Encoding $false))
 
-git add $csproj
-git commit -m "Release $tag" | Out-Null
-git tag -a $tag -m "Freezia $Version"
-git push origin HEAD
-git push origin $tag
-if ($LASTEXITCODE -ne 0) { throw 'git push failed' }
+Invoke-Git add $csproj
+Invoke-Git commit -q -m "Release $tag"
+Invoke-Git tag -a $tag -m "Freezia $Version"
+Invoke-Git push origin HEAD
+Invoke-Git push origin $tag
 
 $repo = ((git remote get-url origin) -replace '\.git$', '') -replace '^git@github\.com:', 'https://github.com/'
 Write-Host "`nReleased $tag ($old -> $Version)." -ForegroundColor Green
