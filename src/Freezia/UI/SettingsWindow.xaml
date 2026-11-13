@@ -10,6 +10,30 @@
         Icon="pack://application:,,,/Freezia;component/Assets/app.ico">
     <Window.Resources>
         <!-- round accent swatch: the selected one gets a ring in the text color -->
+        <!-- theme preview card -->
+        <Style x:Key="ThemeCard" TargetType="RadioButton">
+            <Setter Property="Margin" Value="0,0,8,8" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Ring" CornerRadius="11" BorderThickness="2" BorderBrush="Transparent" Padding="3">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Ring" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="AccentSwatch" TargetType="RadioButton">
             <Setter Property="Width" Value="32" />
             <Setter Property="Height" Value="32" />
@@ -82,11 +106,10 @@
                                 <RadioButton x:Name="LangTh" Style="{StaticResource PillRadio}" GroupName="lang" Content="ไทย" Checked="OnLanguagePicked" />
                                 <RadioButton x:Name="LangEn" Style="{StaticResource PillRadio}" GroupName="lang" Content="English" Checked="OnLanguagePicked" />
                             </StackPanel>
-                            <TextBlock x:Name="LblTheme" Grid.Row="1" Style="{StaticResource RowLabel}" />
-                            <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
-                                <RadioButton x:Name="ThemeDark" Style="{StaticResource PillRadio}" GroupName="theme" Checked="OnThemePicked" />
-                                <RadioButton x:Name="ThemeLight" Style="{StaticResource PillRadio}" GroupName="theme" Checked="OnThemePicked" />
-                                <RadioButton x:Name="ThemeSystem" Style="{StaticResource PillRadio}" GroupName="theme" Checked="OnThemePicked" />
+                            <TextBlock x:Name="LblTheme" Grid.Row="1" Style="{StaticResource RowLabel}" VerticalAlignment="Top" Margin="0,8,0,0" />
+                            <StackPanel Grid.Row="1" Grid.Column="1">
+                                <WrapPanel x:Name="ThemePanel" />
+                                <TextBlock x:Name="ThemeHint" Style="{StaticResource DimText}" Margin="0,0,0,4" />
                             </StackPanel>
                             <TextBlock x:Name="LblAccent" Grid.Row="2" Style="{StaticResource RowLabel}" VerticalAlignment="Top" Margin="0,18,0,0" />
                             <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,12,0,0">

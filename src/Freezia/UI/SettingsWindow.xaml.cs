@@ -20,20 +20,37 @@ public partial class SettingsWindow : Window
         _edit = SettingsService.Clone(service.Current);
 
         _originalLanguage = Loc.Language;
-        _originalTheme = ThemeManager.Mode;
+        _originalThemeId = ThemeManager.ThemeId;
+        _originalCustomBg = ThemeManager.CustomBackground;
+        _themeId = ThemeManager.ThemeId;
+        _customBg = ThemeManager.CustomBackground;
         LangTh.IsChecked = _edit.Language == AppLanguage.Thai;
         LangEn.IsChecked = _edit.Language == AppLanguage.English;
-        ThemeDark.IsChecked = _edit.Theme == AppTheme.Dark;
-        ThemeLight.IsChecked = _edit.Theme == AppTheme.Light;
-        ThemeSystem.IsChecked = _edit.Theme == AppTheme.System;
+        BuildThemeCards();
         _originalAccent = ThemeManager.Accent;
         _accent = ThemeManager.Accent;
         BuildAccentSwatches();
         AccentPicker.ShowAlpha = false;
         AccentPicker.ShowImageTools = false;
-        AccentPicker.ColorChanged += c => PreviewAccent(c);
-        AccentPicker.Committed += c => { PreviewAccent(c); AccentPopup.IsOpen = false; };
-        AccentPicker.Cancelled += () => { PreviewAccent(_accentBeforePicker); AccentPopup.IsOpen = false; };
+        // one color picker popup, shared by "custom accent" and "custom background"
+        AccentPicker.ColorChanged += c => { if (_pickingBackground) PreviewCustomBackground(c); else PreviewAccent(c); };
+        AccentPicker.Committed += c =>
+        {
+            if (_pickingBackground) PreviewCustomBackground(c); else PreviewAccent(c);
+            AccentPopup.IsOpen = false;
+        };
+        AccentPicker.Cancelled += () =>
+        {
+            if (_pickingBackground)
+            {
+                _customBg = _bgBeforePicker;
+                _themeId = _themeBeforePicker;
+                ThemeManager.Apply(_themeId, _customBg);
+                BuildThemeCards();
+            }
+            else PreviewAccent(_accentBeforePicker);
+            AccentPopup.IsOpen = false;
+        };
         _ready = true;
 
         ApplyLanguage();
@@ -82,14 +99,21 @@ public partial class SettingsWindow : Window
             if (!_saved)
             {
                 Loc.Set(_originalLanguage);
-                ThemeManager.Apply(_originalTheme);
+                ThemeManager.Apply(_originalThemeId, _originalCustomBg);
                 ThemeManager.SetAccent(_originalAccent);
             }
         };
     }
 
     private readonly AppLanguage _originalLanguage;
-    private readonly AppTheme _originalTheme;
+    private readonly string _originalThemeId;
+    private readonly Color? _originalCustomBg;
+    private string _themeId;
+    private Color? _customBg;
+    private bool _pickingBackground;
+    private Color? _bgBeforePicker;
+    private string _themeBeforePicker = "dark";
+    private RadioButton? _customThemeCard;
     private readonly bool _ready;
     private bool _saved;
 
@@ -125,9 +149,8 @@ public partial class SettingsWindow : Window
         LblAccent.Text = Strings.SettingsAccent;
         AccentHint.Text = Strings.SettingsAccentHint;
         if (AccentPanel.Children.Count > 0) BuildAccentSwatches();
-        ThemeDark.Content = Strings.ThemeDark;
-        ThemeLight.Content = Strings.ThemeLight;
-        ThemeSystem.Content = Strings.ThemeSystem;
+        ThemeHint.Text = Strings.SettingsThemeHint;
+        if (ThemePanel.Children.Count > 0) BuildThemeCards();
         BoxRegion.Label = Strings.SettingsHotkeyRegion;
         BoxScreen.Label = Strings.SettingsHotkeyScreen;
         BoxAll.Label = Strings.SettingsHotkeyAll;
@@ -141,10 +164,153 @@ public partial class SettingsWindow : Window
         Loc.Set(LangEn.IsChecked == true ? AppLanguage.English : AppLanguage.Thai);
     }
 
-    private void OnThemePicked(object sender, RoutedEventArgs e)
+    // ---------------- color themes ----------------
+
+    private void BuildThemeCards()
+    {
+        ThemePanel.Children.Clear();
+        string T(ThemeDef d) => Loc.Language == AppLanguage.English ? d.En : d.Th;
+
+        // follow Windows: half dark, half light
+        var sys = new Grid();
+        sys.ColumnDefinitions.Add(new ColumnDefinition());
+        sys.ColumnDefinitions.Add(new ColumnDefinition());
+        var left = Preview(ThemeManager.Themes[0], new CornerRadius(8, 0, 0, 8));
+        var right = Preview(ThemeManager.Themes[1], new CornerRadius(0, 8, 8, 0));
+        Grid.SetColumn(right, 1);
+        sys.Children.Add(left);
+        sys.Children.Add(right);
+        AddCard(ThemeManager.SystemId, sys, Strings.ThemeSystem);
+
+        foreach (var t in ThemeManager.Themes) AddCard(t.Id, Preview(t, new CornerRadius(8)), T(t));
+
+        // custom background: generated preview, or a "+" until a color was picked
+        FrameworkElement customPreview = _customBg is Color cb
+            ? Preview(ThemeManager.FromBackground(cb), new CornerRadius(8))
+            : new Border
+            {
+                CornerRadius = new CornerRadius(8),
+                BorderThickness = new Thickness(1.5),
+                BorderBrush = (Brush)FindResource("TextDimBrush"),
+                Child = new TextBlock
+                {
+                    Text = "+",
+                    FontSize = 22,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Foreground = (Brush)FindResource("TextDimBrush"),
+                },
+            };
+        _customThemeCard = AddCard(ThemeManager.CustomId, customPreview, Strings.ThemeCustom);
+        _customThemeCard.ToolTip = Strings.ThemeCustomPick;
+    }
+
+    private RadioButton AddCard(string id, FrameworkElement preview, string name)
+    {
+        preview.Width = 88;
+        preview.Height = 56;
+        var label = new TextBlock { Text = name, FontSize = 11.5, Margin = new Thickness(0, 5, 0, 1), HorizontalAlignment = HorizontalAlignment.Center };
+        label.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
+        var stack = new StackPanel();
+        stack.Children.Add(preview);
+        stack.Children.Add(label);
+        var rb = new RadioButton
+        {
+            Style = (Style)FindResource("ThemeCard"),
+            GroupName = "themes",
+            Content = stack,
+            IsChecked = id == _themeId,
+        };
+        rb.Click += (_, _) => PickTheme(id);
+        ThemePanel.Children.Add(rb);
+        return rb;
+    }
+
+    /// <summary>A miniature window in the theme's colors: sidebar, two text lines, an accent button.</summary>
+    private static Border Preview(ThemeDef t, CornerRadius corners)
+    {
+        SolidColorBrush B(Color c) => new(c);
+        var canvas = new Canvas { ClipToBounds = true };
+        var side = new Border { Width = 22, Height = 56, Background = B(t.Surface) };
+        canvas.Children.Add(side);
+        void Line(double x, double y, double w, Color c)
+        {
+            var r = new Border { Width = w, Height = 4, CornerRadius = new CornerRadius(2), Background = B(c) };
+            Canvas.SetLeft(r, x);
+            Canvas.SetTop(r, y);
+            canvas.Children.Add(r);
+        }
+        Line(5, 9, 12, t.TextDim);
+        Line(5, 17, 10, t.TextDim);
+        Line(30, 10, 40, t.Text);
+        Line(30, 19, 28, t.TextDim);
+        var card = new Border { Width = 50, Height = 14, CornerRadius = new CornerRadius(3), Background = B(t.Surface2), BorderBrush = B(t.Border), BorderThickness = new Thickness(1) };
+        Canvas.SetLeft(card, 30);
+        Canvas.SetTop(card, 28);
+        canvas.Children.Add(card);
+        var accent = new Border { Width = 18, Height = 7, CornerRadius = new CornerRadius(3.5), Background = B(t.Accent) };
+        Canvas.SetLeft(accent, 62);
+        Canvas.SetTop(accent, 45);
+        canvas.Children.Add(accent);
+        return new Border
+        {
+            CornerRadius = corners,
+            Background = B(t.Bg),
+            BorderBrush = B(t.Border),
+            BorderThickness = new Thickness(1),
+            Child = canvas,
+            ClipToBounds = true,
+        };
+    }
+
+    private void PickTheme(string id)
     {
         if (!_ready) return;
-        ThemeManager.Apply(SelectedTheme);
+        if (id == ThemeManager.CustomId)
+        {
+            OpenBackgroundPicker();
+            return;
+        }
+        _themeId = id;
+        ThemeManager.Apply(_themeId, _customBg);
+        RefreshAccentDefaultSwatch();
+    }
+
+    private void OpenBackgroundPicker()
+    {
+        _pickingBackground = true;
+        _bgBeforePicker = _customBg;
+        _themeBeforePicker = _themeId;
+        var start = _customBg ?? ThemeManager.Current.Bg;
+        AccentPopup.PlacementTarget = _customThemeCard;
+        AccentPicker.Begin(start, Strings.ThemeCustom);
+        AccentPopup.IsOpen = true;
+        PreviewCustomBackground(start);
+    }
+
+    /// <summary>Live preview of a generated theme from one background color.</summary>
+    private void PreviewCustomBackground(Color c)
+    {
+        _customBg = Color.FromRgb(c.R, c.G, c.B);
+        _themeId = ThemeManager.CustomId;
+        ThemeManager.Apply(_themeId, _customBg);
+        if (_customThemeCard != null)
+        {
+            var stack = (StackPanel)_customThemeCard.Content;
+            var p = Preview(ThemeManager.FromBackground(_customBg.Value), new CornerRadius(8));
+            p.Width = 88;
+            p.Height = 56;
+            stack.Children[0] = p;
+            _customThemeCard.IsChecked = true;
+        }
+        RefreshAccentDefaultSwatch();
+    }
+
+    /// <summary>The "theme default" accent swatch shows the current theme's own accent.</summary>
+    private void RefreshAccentDefaultSwatch()
+    {
+        if (AccentPanel.Children.Count > 0 && AccentPanel.Children[0] is RadioButton first)
+            first.Background = new SolidColorBrush(ThemeManager.Current.Accent);
     }
 
     // ---------------- accent color ----------------
@@ -161,7 +327,7 @@ public partial class SettingsWindow : Window
         foreach (var (th, en, color) in ThemeManager.AccentPresets)
         {
             // the default blue is shown as the dark palette's blue
-            var shown = color ?? Color.FromRgb(0x5B, 0x8C, 0xFF);
+            var shown = color ?? ThemeManager.Current.Accent;
             var rb = new RadioButton
             {
                 Style = (Style)FindResource("AccentSwatch"),
@@ -210,9 +376,10 @@ public partial class SettingsWindow : Window
 
     private void OpenAccentPicker()
     {
+        _pickingBackground = false;
         _accentBeforePicker = _accent;
         AccentPopup.PlacementTarget = _customSwatch;
-        AccentPicker.Begin(_accent ?? Color.FromRgb(0x5B, 0x8C, 0xFF), Strings.SettingsAccent);
+        AccentPicker.Begin(_accent ?? ThemeManager.Current.Accent, Strings.SettingsAccent);
         AccentPopup.IsOpen = true;
     }
 
@@ -228,8 +395,6 @@ public partial class SettingsWindow : Window
         }
     }
 
-    private AppTheme SelectedTheme =>
-        ThemeLight.IsChecked == true ? AppTheme.Light : ThemeSystem.IsChecked == true ? AppTheme.System : AppTheme.Dark;
 
     private void StopAllRecording()
     {
@@ -336,7 +501,8 @@ public partial class SettingsWindow : Window
             : AfterCaptureAction.OpenEditor;
 
         _edit.Language = LangEn.IsChecked == true ? AppLanguage.English : AppLanguage.Thai;
-        _edit.Theme = SelectedTheme;
+        _edit.ThemeId = _themeId;
+        _edit.CustomBackground = _customBg is Color bg ? ColorUtil.ToHex6(bg) : null;
         _edit.AccentColor = _accent is Color accent ? ColorUtil.ToHex6(accent) : null;
 
         bool startup = StartupToggle.IsChecked == true;

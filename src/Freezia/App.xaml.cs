@@ -56,7 +56,7 @@ public partial class App : Application
         Settings.Load();
         if (Settings.IsFirstRun) ApplyInstallerLanguage();
         Loc.Set(Settings.Current.Language);
-        ThemeManager.Apply(Settings.Current.Theme);
+        ThemeManager.Apply(Settings.Current.ThemeId, ParseAccent(Settings.Current.CustomBackground));
         ThemeManager.SetAccent(ParseAccent(Settings.Current.AccentColor));
 
         _instance.Listen(
@@ -87,7 +87,7 @@ public partial class App : Application
             _tray?.UpdateHotkeys(Settings.Current);
             _hotkeys?.SetBindings(Settings.Current);
             Loc.Set(Settings.Current.Language);
-            ThemeManager.Apply(Settings.Current.Theme);
+            ThemeManager.Apply(Settings.Current.ThemeId, ParseAccent(Settings.Current.CustomBackground));
             ThemeManager.SetAccent(ParseAccent(Settings.Current.AccentColor));
         };
     }

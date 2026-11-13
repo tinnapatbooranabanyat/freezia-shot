@@ -33,7 +33,14 @@ public sealed class AppSettings
     public bool StartWithWindows { get; set; }
 
     public AppLanguage Language { get; set; } = AppLanguage.Thai;
+    /// <summary>Legacy (v1.0 settings): only read to migrate to <see cref="ThemeId"/>.</summary>
     public AppTheme Theme { get; set; } = AppTheme.Dark;
+
+    /// <summary>Color theme id: "system", "custom" or a built-in theme ("dark", "light", "midnight"…).</summary>
+    public string? ThemeId { get; set; }
+
+    /// <summary>Background color "#RRGGBB" for the "custom" theme.</summary>
+    public string? CustomBackground { get; set; }
 
     /// <summary>UI accent color "#RRGGBB" (buttons, selection, highlights). Null = default blue.</summary>
     public string? AccentColor { get; set; }

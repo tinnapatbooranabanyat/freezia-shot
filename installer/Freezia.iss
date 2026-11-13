@@ -48,6 +48,9 @@ UninstallDisplayName={#AppName}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern dynamic
+; Tell the shell to refresh icons after (un)install, so an upgrade with a new icon
+; does not keep showing the old one from the icon cache (taskbar, Start, shortcuts).
+ChangesAssociations=yes
 ShowLanguageDialog=auto
 
 [Languages]

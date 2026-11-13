@@ -90,6 +90,10 @@ public sealed class SettingsService
             s.Editor.SavedColors.RemoveRange(MaxSavedColors, s.Editor.SavedColors.Count - MaxSavedColors);
         if (!Enum.IsDefined(s.Language)) s.Language = AppLanguage.Thai;
         if (!Enum.IsDefined(s.Theme)) s.Theme = AppTheme.Dark;
+        if (string.IsNullOrWhiteSpace(s.ThemeId))
+            s.ThemeId = s.Theme switch { AppTheme.Light => "light", AppTheme.System => ThemeManager.SystemId, _ => "dark" };
+        if (s.ThemeId != ThemeManager.SystemId && s.ThemeId != ThemeManager.CustomId && ThemeManager.Find(s.ThemeId) == null)
+            s.ThemeId = "dark";
         if (s.Editor.RecentColors.Count > 8)
             s.Editor.RecentColors.RemoveRange(8, s.Editor.RecentColors.Count - 8);
         s.Editor.Thickness = Math.Clamp(s.Editor.Thickness, 1, 40);

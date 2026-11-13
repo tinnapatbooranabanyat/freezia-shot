@@ -25,11 +25,12 @@ public static class WindowHelper
                 NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_USE_IMMERSIVE_DARK_MODE, ref on, sizeof(int));
                 int corner = NativeMethods.DWMWCP_ROUND;
                 NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_WINDOW_CORNER_PREFERENCE, ref corner, sizeof(int));
-                int caption = dark ? Rgb(0x20, 0x21, 0x27) : Rgb(0xFF, 0xFF, 0xFF); // = SurfaceBrush
+                var t = Core.ThemeManager.Current;
+                int caption = Rgb(t.Surface.R, t.Surface.G, t.Surface.B); // = SurfaceBrush
                 NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_CAPTION_COLOR, ref caption, sizeof(int));
-                int border = dark ? Rgb(0x3B, 0x3C, 0x46) : Rgb(0xD8, 0xDB, 0xE3);
+                int border = Rgb(t.Border.R, t.Border.G, t.Border.B);
                 NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_BORDER_COLOR, ref border, sizeof(int));
-                int text = dark ? Rgb(0xED, 0xED, 0xF2) : Rgb(0x1B, 0x1C, 0x22);
+                int text = Rgb(t.Text.R, t.Text.G, t.Text.B);
                 NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_TEXT_COLOR, ref text, sizeof(int));
             }
             catch
