@@ -1,0 +1,19 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Dark palette: every brush key must exist in both Colors.*.xaml files -->
+    <SolidColorBrush x:Key="BgBrush" Color="#FF17181C" />
+    <SolidColorBrush x:Key="SurfaceBrush" Color="#FF202127" />
+    <SolidColorBrush x:Key="Surface2Brush" Color="#FF2A2B33" />
+    <SolidColorBrush x:Key="Surface3Brush" Color="#FF34353E" />
+    <SolidColorBrush x:Key="BorderBrush" Color="#FF3B3C46" />
+    <SolidColorBrush x:Key="TextBrush" Color="#FFEDEDF2" />
+    <SolidColorBrush x:Key="TextDimBrush" Color="#FF9C9DAA" />
+    <SolidColorBrush x:Key="AccentBrush" Color="#FF5B8CFF" />
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="#FF7AA2FF" />
+    <SolidColorBrush x:Key="AccentPressedBrush" Color="#FF4A76E0" />
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="#335B8CFF" />
+    <SolidColorBrush x:Key="DangerBrush" Color="#FFFF5C5C" />
+    <SolidColorBrush x:Key="HoverBrush" Color="#14FFFFFF" />
+    <SolidColorBrush x:Key="PressedBrush" Color="#22FFFFFF" />
+    <SolidColorBrush x:Key="SwatchRingBrush" Color="#26FFFFFF" />
+</ResourceDictionary>

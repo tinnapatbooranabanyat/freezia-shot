@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Publishes SnapEdit (self-contained, single file, win-x64) and builds the installer.
+    Publishes Freezia (self-contained, single file, win-x64) and builds the installer.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\build.ps1
@@ -13,10 +13,10 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root      = $PSScriptRoot
-$project   = Join-Path $root 'src\SnapEdit\SnapEdit.csproj'
+$project   = Join-Path $root 'src\Freezia\Freezia.csproj'
 $artifacts = Join-Path $root 'artifacts'
 $publish   = Join-Path $artifacts 'publish'
-$iss       = Join-Path $root 'installer\SnapEdit.iss'
+$iss       = Join-Path $root 'installer\Freezia.iss'
 
 function Step($text) { Write-Host "`n==> $text" -ForegroundColor Cyan }
 
@@ -24,7 +24,7 @@ function Step($text) { Write-Host "`n==> $text" -ForegroundColor Cyan }
 [xml]$xml = Get-Content $project
 $version = ($xml.Project.PropertyGroup | ForEach-Object { $_.Version } | Where-Object { $_ }) | Select-Object -First 1
 if (-not $version) { $version = '1.0.0' }
-Write-Host "SnapEdit version $version"
+Write-Host "Freezia version $version"
 
 # ---- .NET SDK check ----
 Step 'Checking .NET SDK'
@@ -33,7 +33,7 @@ if (-not ($sdks -match '^10\.')) { throw '.NET 10 SDK not found. Install it from
 & dotnet --version
 
 # ---- stop a running copy so files are not locked ----
-Get-Process -Name 'SnapEdit' -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$artifacts*" } | Stop-Process -Force
+Get-Process -Name 'Freezia' -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$artifacts*" } | Stop-Process -Force
 
 # ---- publish ----
 Step "Publishing ($Configuration, win-x64, self-contained single file)"
@@ -49,7 +49,7 @@ if (Test-Path $publish) { Remove-Item $publish -Recurse -Force }
     -o $publish
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
 
-$exe = Join-Path $publish 'SnapEdit.exe'
+$exe = Join-Path $publish 'Freezia.exe'
 if (-not (Test-Path $exe)) { throw "Publish output missing: $exe" }
 $sizeMb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
 Write-Host "Published: $exe ($sizeMb MB)" -ForegroundColor Green
@@ -77,6 +77,6 @@ Write-Host "Using $iscc"
 & $iscc "/DAppVersion=$version" "/DPublishDir=$publish" $iss
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed ($LASTEXITCODE)" }
 
-$setup = Join-Path $artifacts "SnapEdit-Setup-$version.exe"
+$setup = Join-Path $artifacts "Freezia-Setup-$version.exe"
 $setupMb = [math]::Round((Get-Item $setup).Length / 1MB, 1)
 Write-Host "`nDone. Installer: $setup ($setupMb MB)" -ForegroundColor Green

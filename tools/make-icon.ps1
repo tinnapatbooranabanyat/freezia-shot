@@ -1,8 +1,8 @@
-# Generates src/SnapEdit/Assets/app.ico (multi-size, PNG-compressed entries).
+# Generates src/Freezia/Assets/app.ico (multi-size, PNG-compressed entries).
 # Run with Windows PowerShell 5.1:  powershell -ExecutionPolicy Bypass -File tools\make-icon.ps1
 Add-Type -AssemblyName System.Drawing
 
-$out = Join-Path $PSScriptRoot '..\src\SnapEdit\Assets\app.ico'
+$out = Join-Path $PSScriptRoot '..\src\Freezia\Assets\app.ico'
 $sizes = 16, 20, 24, 32, 40, 48, 64, 128, 256
 
 function New-RoundedPath([single]$x, [single]$y, [single]$w, [single]$h, [single]$r) {
