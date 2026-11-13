@@ -1,12 +1,14 @@
 # Freezia
 
 โปรแกรมจับภาพหน้าจอสำหรับ Windows 10/11 (x64) แนวเดียวกับ Lightshot แต่หน้าตาทันสมัยกว่าและแก้ไขภาพได้มากกว่า
-เขียนด้วย C# + .NET 10 + WPF ทำงานในเครื่องเท่านั้น **ไม่มีการเชื่อมต่ออินเทอร์เน็ต ไม่มี cloud ไม่มี telemetry**
+เขียนด้วย C# + .NET 10 + WPF ภาพและการตั้งค่าทั้งหมดอยู่ในเครื่องเท่านั้น **ไม่มี cloud ไม่มี telemetry**
+การเชื่อมต่ออินเทอร์เน็ตมีอย่างเดียวคือตรวจหาอัปเดตจาก GitHub (ปิดได้ในหน้าตั้งค่า)
 
 > **English:** Freezia is a free, open-source (MIT) screenshot tool for Windows 10/11. Capture a region, window,
 > UI element, screen or all monitors, then annotate it in a built-in editor (arrows, shapes, text, steps, blur,
 > pixelate, spotlight, crop, resize). It also does Thai/English OCR, QR/barcode reading, pin-to-screen, capture
-> history and a screen color picker. Everything runs locally: no network connections, no telemetry.
+> history and a screen color picker. Everything runs locally and there is no telemetry; the only network
+> access is an update check against GitHub Releases (can be turned off in Settings).
 > Downloads: [Releases](https://github.com/tinnapatbooranabanyat/freezia-shot/releases) ·
 > [Code signing policy](#code-signing-policy)
 
@@ -100,6 +102,23 @@ workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) build 
 3. เลือกโฟลเดอร์ติดตั้งเองได้
 4. ตัวเลือกเพิ่มเติม (ไม่บังคับ ปิดไว้เป็นค่าเริ่มต้น): สร้างไอคอนบนเดสก์ท็อป และเปิด Freezia อัตโนมัติเมื่อเข้าสู่ Windows
 5. ติดตั้งเวอร์ชันใหม่ทับเวอร์ชันเก่าได้เลย ตัวติดตั้งจะสั่งปิดโปรแกรมที่รันอยู่ให้เอง
+
+### อัปเดตในแอป (ตั้งแต่เวอร์ชัน 1.0.1)
+
+- Freezia ตรวจหน้า Releases บน GitHub ตอนเปิดโปรแกรมและทุก 6 ชั่วโมง ถ้ามีเวอร์ชันใหม่จะเด้งแจ้งเตือนมุมจอ
+  และมีรายการ "อัปเดตเป็นเวอร์ชัน …" ในเมนูถาด
+- กด **อัปเดตเลย** แล้วโปรแกรมจะดาวน์โหลด ตรวจ SHA-256 (และลายเซ็นดิจิทัล ถ้าเวอร์ชันที่ใช้อยู่มีลายเซ็น)
+  ติดตั้งทับ แล้วเปิดตัวเองขึ้นมาใหม่ การตั้งค่าและประวัติยังอยู่ครบ
+- ปิดการตรวจอัตโนมัติ หรือกด "ตรวจหาอัปเดตตอนนี้" ได้ที่หน้าตั้งค่า › ทั่วไป
+
+### ปล่อยเวอร์ชันใหม่ (สำหรับผู้พัฒนา)
+
+```bash
+powershell -ExecutionPolicy Bypass -File .\release.ps1 1.0.1
+```
+
+สคริปต์จะแก้ `<Version>` ใน `Freezia.csproj`, commit, สร้าง tag `v1.0.1` แล้ว push จากนั้น GitHub Actions จะ build และสร้างหน้า Release
+(รายการ "มีอะไรใหม่" มาจากหัวข้อ commit ตั้งแต่เวอร์ชันก่อนหน้า) ภายในประมาณ 10 นาที เครื่องที่ติดตั้ง Freezia ไว้จะเห็นการแจ้งเตือนอัปเดต
 
 **ถอนการติดตั้ง** ทำได้ที่ Settings › Apps หรือ Control Panel ตัวถอนจะปิดโปรแกรมแล้วลบออกให้หมด:
 - ไฟล์โปรแกรม, ทางลัดใน Start และเดสก์ท็อป
@@ -240,6 +259,11 @@ workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) build 
 
 ## เช็กลิสต์สำหรับทดสอบเอง
 
+**อัปเดต**
+- [ ] ติดตั้งเวอร์ชันเก่า แล้วปล่อยเวอร์ชันใหม่: แจ้งเตือนเด้งภายใน ~20 วินาทีหลังเปิดโปรแกรม และมีรายการในเมนูถาด
+- [ ] กดอัปเดต: ดาวน์โหลด ติดตั้ง แล้ว Freezia เปิดขึ้นมาใหม่เป็นเวอร์ชันใหม่ (ลองทั้งแบบติดตั้ง "เฉพาะฉัน" และ "ทุกคน" ซึ่งจะถาม UAC)
+- [ ] ปิด "ตรวจหาอัปเดตอัตโนมัติ": ไม่มีการเชื่อมต่อเลย
+
 **ปุ่มลัดและการแคป**
 - [ ] `PrintScreen` เข้าโหมดแคปพื้นที่ และ Snipping Tool ไม่เด้ง
 - [ ] `Ctrl + PrintScreen` ได้ภาพเต็มจอของจอที่เมาส์อยู่ (ลองทั้งจอหลักและจอรอง)
@@ -314,8 +338,11 @@ Free code signing provided by [SignPath.io](https://about.signpath.io), certific
   - Committers and reviewers: [Tinnapat Booranabanyat](https://github.com/tinnapatbooranabanyat)
   - Approvers: [Tinnapat Booranabanyat](https://github.com/tinnapatbooranabanyat)
 - **Privacy policy:** This program will not transfer any information to other networked systems unless
-  specifically requested by the user or the person installing or operating it. Freezia itself makes no network
-  connections; screenshots, settings and history stay on the local computer.
+  specifically requested by the user or the person installing or operating it. Screenshots, settings and history
+  stay on the local computer. The only network access is the update check: Freezia asks the GitHub API
+  (`api.github.com`) for the latest release of this repository and, when the user clicks "Update now", downloads
+  the installer from GitHub. No personal data, usage data or screenshots are sent. Automatic update checks can be
+  turned off in Settings › General.
 
 ## ไลเซนส์
 

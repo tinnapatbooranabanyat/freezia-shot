@@ -18,12 +18,15 @@ public partial class ToastWindow : Window
     private static ToastWindow? _current;
     private readonly DispatcherTimer _timer;
     private readonly string? _revealPath;
+    private readonly Action? _onClick;
     private bool _closing;
 
-    private ToastWindow(string title, string? message, string? revealPath, BitmapSource? thumb, bool error)
+    private ToastWindow(string title, string? message, string? revealPath, BitmapSource? thumb, bool error,
+                        Action? onClick, double? seconds)
     {
         InitializeComponent();
         _revealPath = revealPath;
+        _onClick = onClick;
         TitleText.Text = title;
         if (!string.IsNullOrEmpty(message))
         {
@@ -47,9 +50,9 @@ public partial class ToastWindow : Window
             IconGlyph.Foreground = (Brush)FindResource("DangerBrush");
             IconBadge.Background = new SolidColorBrush(Color.FromArgb(0x33, 0xFF, 0x5C, 0x5C));
         }
-        if (revealPath == null) Card.Cursor = Cursors.Arrow;
+        if (revealPath == null && onClick == null) Card.Cursor = Cursors.Arrow;
 
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(error ? 4 : 3) };
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds ?? (error ? 4 : 3)) };
         _timer.Tick += (_, _) => FadeOut();
 
         SourceInitialized += (_, _) => WindowHelper.MakeToolWindow(this, noActivate: true);
@@ -60,12 +63,14 @@ public partial class ToastWindow : Window
     }
 
     public static void ShowToast(string title, string? message = null, string? revealPath = null,
-                                 BitmapSource? thumb = null, bool error = false)
+                                 BitmapSource? thumb = null, bool error = false,
+                                 Action? onClick = null, double? seconds = null, string? glyph = null)
     {
         try
         {
             _current?.CloseNow();
-            var t = new ToastWindow(title, message, revealPath, thumb, error);
+            var t = new ToastWindow(title, message, revealPath, thumb, error, onClick, seconds);
+            if (glyph != null) t.IconGlyph.Text = glyph;
             _current = t;
             t.Show();
         }
@@ -104,6 +109,7 @@ public partial class ToastWindow : Window
     {
         if (_revealPath != null) RevealInExplorer(_revealPath);
         CloseNow();
+        _onClick?.Invoke();
     }
 
     public static void RevealInExplorer(string path)

@@ -36,6 +36,9 @@ public sealed class AppSettings
     public bool HistoryEnabled { get; set; } = true;
 
     public CaptureMethod CaptureMethod { get; set; } = CaptureMethod.Auto;
+
+    /// <summary>Check GitHub for a newer version at start-up and every few hours.</summary>
+    public bool AutoCheckUpdates { get; set; } = true;
     public int HistoryLimit { get; set; } = 50;
 
     /// <summary>Custom save folder; null/empty = the user's Downloads known folder.</summary>

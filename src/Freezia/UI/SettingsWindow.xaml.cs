@@ -65,6 +65,7 @@ public partial class SettingsWindow : Window
         MethodAuto.IsChecked = _edit.CaptureMethod == CaptureMethod.Auto;
         MethodGdi.IsChecked = _edit.CaptureMethod == CaptureMethod.Gdi;
         HistoryToggle.IsChecked = _edit.HistoryEnabled;
+        UpdateToggle.IsChecked = _edit.AutoCheckUpdates;
         HistoryLimitSlider.Value = Math.Clamp(_edit.HistoryLimit, 10, 200);
         HistoryLimitValue.Text = ((int)HistoryLimitSlider.Value).ToString();
         HistoryLimitSlider.ValueChanged += (_, e) => HistoryLimitValue.Text = ((int)e.NewValue).ToString();
@@ -126,6 +127,27 @@ public partial class SettingsWindow : Window
     private readonly bool _ready;
     private bool _saved;
 
+    private async void OnCheckUpdates(object sender, RoutedEventArgs e)
+    {
+        CheckUpdateButton.IsEnabled = false;
+        UpdateStatus.Text = Strings.UpdateChecking;
+        try
+        {
+            var info = await App.Current.CheckForUpdatesAsync(manual: true);
+            UpdateStatus.Text = info == null
+                ? string.Format(Strings.UpdateUpToDate, AppInfo.Version)
+                : string.Format(Strings.UpdateFound, info.Version.ToString(3));
+        }
+        catch (Exception ex)
+        {
+            UpdateStatus.Text = string.Format(Strings.UpdateCheckFailed, ex.Message);
+        }
+        finally
+        {
+            CheckUpdateButton.IsEnabled = true;
+        }
+    }
+
     private void ApplyLanguage()
     {
         Title = Strings.SettingsTitle;
@@ -137,6 +159,9 @@ public partial class SettingsWindow : Window
         LblAll.Text = Strings.SettingsHotkeyAll;
         LblColor.Text = Strings.SettingsHotkeyColor;
         HistoryToggle.Content = Strings.SettingsHistory;
+        UpdateToggle.Content = Strings.SettingsAutoUpdate;
+        UpdateHint.Text = Strings.SettingsUpdateHint;
+        CheckUpdateButton.Content = Strings.SettingsCheckNow;
         LblCaptureMethod.Text = Strings.SettingsCaptureMethod;
         MethodAuto.Content = Strings.CaptureMethodAuto;
         MethodGdi.Content = Strings.CaptureMethodGdi;
@@ -516,6 +541,7 @@ public partial class SettingsWindow : Window
         _edit.HotkeyAllScreens = BoxAll.Hotkey;
         _edit.HotkeyColorPicker = BoxColor.Hotkey;
         _edit.HistoryEnabled = HistoryToggle.IsChecked == true;
+        _edit.AutoCheckUpdates = UpdateToggle.IsChecked == true;
         _edit.CaptureMethod = MethodGdi.IsChecked == true ? CaptureMethod.Gdi : CaptureMethod.Auto;
         _edit.HistoryLimit = (int)HistoryLimitSlider.Value;
         if (!_edit.HistoryEnabled) HistoryService.Clear();

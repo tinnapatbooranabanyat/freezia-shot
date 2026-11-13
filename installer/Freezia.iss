@@ -100,6 +100,8 @@ Root: HKCU; Subkey: "Software\{#AppName}"; ValueType: string; ValueName: "Instal
 Filename: "{tmp}\vc_redist.x64.exe"; Parameters: "/install /passive /norestart"; StatusMsg: "{cm:InstallingVCRedist}"; \
     Flags: waituntilterminated; Check: VCRedistNeeded
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+; In-app update (Freezia runs Setup with /SILENT /UPDATE=1): start Freezia again as the signed-in user.
+Filename: "{app}\{#AppExe}"; Flags: nowait runasoriginaluser; Check: IsAppUpdate
 
 [UninstallDelete]
 ; settings.json, logs, and the native libraries .NET extracts from the single-file exe
@@ -156,6 +158,12 @@ begin
                  and (Installed = 1)
                  and RegQueryDWordValue(HKLM64, 'SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes\x64', 'Minor', Minor)
                  and (Minor >= 40));
+end;
+
+{ Started by Freezia's own updater (see UpdateService.LaunchInstaller). }
+function IsAppUpdate(): Boolean;
+begin
+  Result := ExpandConstant('{param:UPDATE|0}') = '1';
 end;
 
 function InitializeSetup(): Boolean;

@@ -210,6 +210,12 @@
                                     IsSnapToTickEnabled="True" TickFrequency="10" VerticalAlignment="Center" Margin="8,0" />
                         </DockPanel>
                         <TextBlock x:Name="HistoryHint" Style="{StaticResource DimText}" Margin="50,6,0,0" />
+                        <CheckBox x:Name="UpdateToggle" Style="{StaticResource ToggleSwitch}" Margin="0,14,0,0" />
+                        <TextBlock x:Name="UpdateHint" Style="{StaticResource DimText}" Margin="50,4,0,0" />
+                        <StackPanel Orientation="Horizontal" Margin="50,10,0,0">
+                            <Button x:Name="CheckUpdateButton" MinWidth="150" Click="OnCheckUpdates" />
+                            <TextBlock x:Name="UpdateStatus" Style="{StaticResource DimText}" Margin="12,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="460" />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
             </StackPanel>

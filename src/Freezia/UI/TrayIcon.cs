@@ -24,6 +24,10 @@ public sealed class TrayIcon : IDisposable
     public event Action? PickColor;
     public event Action? OpenSettings;
     public event Action? ExitRequested;
+    public event Action? OpenUpdate;
+
+    /// <summary>Newer version waiting to be installed: shown at the top of the menu.</summary>
+    public UpdateInfo? Update { get; set; }
 
     public TrayIcon(AppSettings settings)
     {
@@ -56,6 +60,11 @@ public sealed class TrayIcon : IDisposable
     {
         _menu?.Close();
         var m = new TrayMenu();
+        if (Update is UpdateInfo u)
+        {
+            m.AddGlyphItem("\uE896", string.Format(Strings.TrayUpdate, u.Version.ToString(3)), () => OpenUpdate?.Invoke());
+            m.AddSeparator();
+        }
         // Capture items are delayed so the menu's fade-out is gone before the screen is frozen.
         m.AddItem(TrayMenu.IconRegion, Strings.TrayCaptureRegion, Key(_settings.HotkeyRegion), () => Delayed(() => CaptureRegion?.Invoke(), 200), bold: true);
         m.AddItem(TrayMenu.IconScreen, Strings.TrayCaptureScreen, Key(_settings.HotkeyScreen), () => Delayed(() => CaptureScreen?.Invoke(), 200));

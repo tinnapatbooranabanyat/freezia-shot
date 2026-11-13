@@ -199,6 +199,31 @@ public static class Strings
     public static string SettingsCancel => T("ยกเลิก", "Cancel");
     public static string SettingsFolderDefaultHint => T("(ค่าเริ่มต้น: Downloads)", "(default: Downloads)");
     public static string SettingsStartupFailed => T("ไม่สามารถตั้งค่าเปิดพร้อม Windows ได้", "Could not change the start-with-Windows setting");
-    public static string SettingsAbout => T("Freezia เวอร์ชัน {0} • ทำงานในเครื่องเท่านั้น ไม่มีการเชื่อมต่ออินเทอร์เน็ต",
-                                            "Freezia version {0} • Works offline, never connects to the internet");
+    public static string SettingsAbout => T("Freezia เวอร์ชัน {0} • ภาพทั้งหมดอยู่ในเครื่องนี้เท่านั้น",
+                                            "Freezia version {0} • Your screenshots never leave this PC");
+
+    // ---- updates ----
+    public static string TrayUpdate => T("อัปเดตเป็นเวอร์ชัน {0}", "Update to version {0}");
+    public static string UpdateToastTitle => T("มี Freezia {0} แล้ว", "Freezia {0} is available");
+    public static string UpdateToastMessage => T("คลิกเพื่อดูรายละเอียดและอัปเดต", "Click to see what's new and update");
+    public static string UpdateWindowTitle => T("อัปเดต Freezia", "Update Freezia");
+    public static string UpdateAvailableTitle => T("Freezia {0} พร้อมให้อัปเดต", "Freezia {0} is ready to install");
+    public static string UpdateCurrentVersion => T("เวอร์ชันที่ใช้อยู่: {0}", "You have version {0}");
+    public static string UpdateWhatsNew => T("มีอะไรใหม่", "What's new");
+    public static string UpdateNow => T("อัปเดตเลย", "Update now");
+    public static string UpdateOpenPage => T("เปิดหน้าดาวน์โหลด", "Open download page");
+    public static string UpdateLater => T("ไว้ทีหลัง", "Later");
+    public static string UpdateRetry => T("ลองอีกครั้ง", "Try again");
+    public static string UpdateDownloading => T("กำลังดาวน์โหลด…", "Downloading…");
+    public static string UpdateDownloadingPercent => T("กำลังดาวน์โหลด… {0}% {1}", "Downloading… {0}% {1}");
+    public static string UpdateInstalling => T("กำลังติดตั้ง Freezia จะปิดแล้วเปิดขึ้นมาใหม่เอง", "Installing. Freezia will close and start again by itself.");
+    public static string UpdateFailed => T("อัปเดตไม่สำเร็จ: {0}", "Update failed: {0}");
+    public static string SettingsAutoUpdate => T("ตรวจหาอัปเดตอัตโนมัติ", "Check for updates automatically");
+    public static string SettingsCheckNow => T("ตรวจหาอัปเดตตอนนี้", "Check for updates now");
+    public static string SettingsUpdateHint => T("ตรวจที่ GitHub ตอนเปิดโปรแกรมและทุก 6 ชั่วโมง ไม่ส่งข้อมูลหรือภาพใดๆ ออกไป",
+                                                 "Checks GitHub at start-up and every 6 hours. No data or screenshots are sent.");
+    public static string UpdateChecking => T("กำลังตรวจหาอัปเดต…", "Checking for updates…");
+    public static string UpdateUpToDate => T("ใช้เวอร์ชันล่าสุดอยู่แล้ว ({0})", "You have the latest version ({0})");
+    public static string UpdateFound => T("พบเวอร์ชัน {0}", "Version {0} is available");
+    public static string UpdateCheckFailed => T("ตรวจหาอัปเดตไม่สำเร็จ: {0}", "Could not check for updates: {0}");
 }

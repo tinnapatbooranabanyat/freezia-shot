@@ -13,6 +13,9 @@ public static class AppInfo
     public const string ActivateEventName = MutexName + "-activate";
     public const string ExitEventName = MutexName + "-exit";
 
+    /// <summary>Inno Setup AppId (installer/Freezia.iss); its uninstall key is "{AppId}_is1".</summary>
+    public const string InstallerAppId = "{8E3F1A6C-2B9D-4E57-A1C4-7D0B3F9E2A58}";
+
     public static string Version =>
         Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0";
 }

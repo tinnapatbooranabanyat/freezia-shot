@@ -15,6 +15,10 @@ public partial class App : Application
     private TrayIcon? _tray;
     private HotkeyManager? _hotkeys;
     private CaptureController? _capture;
+    private readonly UpdateService _updates = new();
+    private DispatcherTimer? _updateTimer;
+    private string? _notifiedVersion;
+    private UpdateWindow? _updateWindow;
 
     public static SettingsService Settings { get; } = new();
 
@@ -77,6 +81,7 @@ public partial class App : Application
         _tray.ExitRequested += ExitApp;
         _tray.OpenHistory += OpenHistory;
         _tray.PickColor += () => _capture?.PickColor();
+        _tray.OpenUpdate += () => { if (_updates.Available is UpdateInfo u) OpenUpdate(u); };
 
         _hotkeys = new HotkeyManager(Dispatcher);
         _hotkeys.SetBindings(Settings.Current);
@@ -87,6 +92,8 @@ public partial class App : Application
         _capture = new CaptureController(Settings, _hotkeys);
         _capture.OpenEditor = OpenEditor;
 
+        StartUpdateChecks();
+
         Settings.Changed += (_, _) =>
         {
             _tray?.UpdateHotkeys(Settings.Current);
@@ -96,6 +103,66 @@ public partial class App : Application
             ThemeManager.SetAccent(ParseAccent(Settings.Current.AccentColor));
             ScreenCapture.PreferWgc = Settings.Current.CaptureMethod == CaptureMethod.Auto;
         };
+    }
+
+    // ---- Updates ----
+
+    private void StartUpdateChecks()
+    {
+        UpdateService.CleanDownloads();
+        // first check shortly after start-up (not during login rush), then every 6 hours
+        _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+        _updateTimer.Tick += async (_, _) =>
+        {
+            _updateTimer.Interval = TimeSpan.FromHours(6);
+            if (Settings.Current.AutoCheckUpdates) await CheckForUpdatesAsync(manual: false);
+        };
+        _updateTimer.Start();
+    }
+
+    /// <summary>Check GitHub for a newer release. Returns the update, or null when up to date (throws on errors if manual).</summary>
+    public async Task<UpdateInfo?> CheckForUpdatesAsync(bool manual)
+    {
+        try
+        {
+            var info = await _updates.CheckAsync();
+            if (_tray != null) _tray.Update = info;
+            if (info != null)
+            {
+                Logger.Info($"Update available: {info.Version} ({info.SetupName})");
+                if (manual) OpenUpdate(info);
+                else if (_notifiedVersion != info.Tag)
+                {
+                    _notifiedVersion = info.Tag; // once per version per session; the tray item stays
+                    ToastWindow.ShowToast(string.Format(Strings.UpdateToastTitle, info.Version.ToString(3)),
+                        Strings.UpdateToastMessage, onClick: () => OpenUpdate(info), seconds: 12, glyph: "\uE896");
+                }
+            }
+            return info;
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Update check failed", ex);
+            if (manual) throw;
+            return null;
+        }
+    }
+
+    public void OpenUpdate(UpdateInfo info)
+    {
+        if (_updateWindow != null)
+        {
+            _updateWindow.Activate();
+            return;
+        }
+        _updateWindow = new UpdateWindow(_updates, info);
+        _updateWindow.Closed += (_, _) => _updateWindow = null;
+        _updateWindow.InstallerStarted += () =>
+        {
+            // Setup also asks us to exit; leaving right away keeps the upgrade quick.
+            Dispatcher.BeginInvoke(ExitApp, DispatcherPriority.Background);
+        };
+        _updateWindow.ShowAndActivate();
     }
 
     public static System.Windows.Media.Color? ParseAccent(string? hex) =>
@@ -216,6 +283,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _updateTimer?.Stop();
+        _updates.Dispose();
         _hotkeys?.Dispose();
         _hotkeys = null;
         _tray?.Dispose();
