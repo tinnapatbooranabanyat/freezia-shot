@@ -74,9 +74,19 @@ if (-not $iscc) {
 if (-not $iscc) { throw 'ISCC.exe not found. Install Inno Setup 6 or 7 from https://jrsoftware.org/isdl.php' }
 Write-Host "Using $iscc"
 
-& $iscc "/DAppVersion=$version" "/DPublishDir=$publish" $iss
+# Compile into a temp folder first: inside a OneDrive/antivirus-watched folder the freshly
+# written Setup.exe can be locked while Inno Setup embeds its icon ("EndUpdateResource failed").
+$stage = Join-Path $env:TEMP "freezia-setup-build"
+if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+New-Item -ItemType Directory -Force $stage | Out-Null
+& $iscc "/O$stage" "/DAppVersion=$version" "/DPublishDir=$publish" $iss
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed ($LASTEXITCODE)" }
 
 $setup = Join-Path $artifacts "Freezia-Setup-$version.exe"
+for ($i = 1; $i -le 10; $i++) {
+    try { Copy-Item (Join-Path $stage "Freezia-Setup-$version.exe") $setup -Force -ErrorAction Stop; break }
+    catch { if ($i -eq 10) { throw }; Start-Sleep -Milliseconds 500 }
+}
+Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 $setupMb = [math]::Round((Get-Item $setup).Length / 1MB, 1)
 Write-Host "`nDone. Installer: $setup ($setupMb MB)" -ForegroundColor Green
