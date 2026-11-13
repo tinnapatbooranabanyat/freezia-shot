@@ -25,6 +25,8 @@ public sealed class TrayIcon : IDisposable
     public event Action? OpenSettings;
     public event Action? ExitRequested;
     public event Action? OpenUpdate;
+    public event Action? OpenImage;
+    public event Action? EditClipboard;
 
     /// <summary>Newer version waiting to be installed: shown at the top of the menu.</summary>
     public UpdateInfo? Update { get; set; }
@@ -72,6 +74,8 @@ public sealed class TrayIcon : IDisposable
         m.AddGlyphItem("", Strings.TrayPickColor, () => Delayed(() => PickColor?.Invoke(), 200));
         m.AddSeparator();
         m.AddGlyphItem("", Strings.TrayHistory, () => OpenHistory?.Invoke());
+        m.AddGlyphItem("\uE8E5", Strings.TrayOpenImage, () => OpenImage?.Invoke());
+        m.AddGlyphItem("\uE77F", Strings.TrayEditClipboard, () => EditClipboard?.Invoke());
         m.AddGlyphItem("", Strings.TrayOpenFolder, () => OpenFolder?.Invoke());
         m.AddGlyphItem("", Strings.TraySettings, () => OpenSettings?.Invoke());
         m.AddSeparator();

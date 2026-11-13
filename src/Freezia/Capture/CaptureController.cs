@@ -175,10 +175,19 @@ public sealed class CaptureController
     }
 
     /// <summary>Shows a Save As dialog. <paramref name="owner"/> may be null (a temporary owner is used).</summary>
-    public string? SaveAs(BitmapSource image, Window? owner)
+    public string? SaveAs(BitmapSource image, Window? owner, string? sourcePath = null)
     {
         var s = _settings.Current;
         bool jpg = s.Format == ImageFormatKind.Jpg;
+        string? initialDir = SafeSaveFolder();
+        string fileName = ImageSaver.BaseName(DateTime.Now) + ImageSaver.Extension(s.Format);
+        if (sourcePath != null)
+        {
+            // an opened image: suggest "<name>_edited" next to the original
+            string? dir = Path.GetDirectoryName(sourcePath);
+            if (dir != null && Directory.Exists(dir)) initialDir = dir;
+            fileName = Path.GetFileNameWithoutExtension(sourcePath) + Strings.EditedSuffix + ImageSaver.Extension(s.Format);
+        }
         var dlg = new Microsoft.Win32.SaveFileDialog
         {
             Title = Strings.SaveDialogTitle,
@@ -187,8 +196,8 @@ public sealed class CaptureController
             DefaultExt = ImageSaver.Extension(s.Format),
             AddExtension = true,
             OverwritePrompt = true,
-            InitialDirectory = SafeSaveFolder(),
-            FileName = ImageSaver.BaseName(DateTime.Now) + ImageSaver.Extension(s.Format),
+            InitialDirectory = initialDir,
+            FileName = fileName,
         };
 
         Window? host = null;

@@ -202,6 +202,18 @@ public static class Strings
     public static string SettingsAbout => T("Freezia เวอร์ชัน {0} • ภาพทั้งหมดอยู่ในเครื่องนี้เท่านั้น",
                                             "Freezia version {0} • Your screenshots never leave this PC");
 
+    // ---- editing other images ----
+    public static string TrayOpenImage => T("เปิดภาพมาแก้ไข…", "Open image to edit…");
+    public static string TrayEditClipboard => T("แก้ไขภาพจากคลิปบอร์ด", "Edit image from clipboard");
+    public static string OpenImageTitle => T("เลือกภาพที่จะแก้ไข", "Choose images to edit");
+    public static string ImageFiles => T("ไฟล์ภาพ", "Image files");
+    public static string AllFiles => T("ทุกไฟล์", "All files");
+    public static string OpenImageFailed => T("เปิดภาพไม่ได้", "Could not open the image");
+    public static string ClipboardNoImage => T("ไม่มีภาพในคลิปบอร์ด", "There is no image on the clipboard");
+    public static string ImageTooLarge => T("ภาพใหญ่เกินไป ({0} × {1}) รองรับไม่เกิน {2} พิกเซลต่อด้าน",
+                                            "The image is too large ({0} × {1}); up to {2} pixels per side");
+    public static string EditedSuffix => T("_แก้ไข", "_edited");
+
     // ---- updates ----
     public static string TrayUpdate => T("อัปเดตเป็นเวอร์ชัน {0}", "Update to version {0}");
     public static string UpdateToastTitle => T("มี Freezia {0} แล้ว", "Freezia {0} is available");

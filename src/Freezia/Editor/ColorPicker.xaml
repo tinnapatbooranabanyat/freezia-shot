@@ -54,9 +54,11 @@
         </Style>
     </UserControl.Resources>
 
-    <Border Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
-            CornerRadius="14" Padding="14" Margin="12" Effect="{StaticResource CardShadow}" Width="284">
-        <StackPanel>
+    <Border x:Name="Card" Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+            CornerRadius="14" Padding="14,14,6,14" Margin="12" Effect="{StaticResource CardShadow}" Width="284">
+        <!-- small screens: FitToScreen shrinks the color square, then this scrolls -->
+        <ScrollViewer x:Name="CardScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+        <StackPanel Margin="0,0,8,0">
             <DockPanel Margin="0,0,0,10">
                 <ToggleButton x:Name="EyedropperButton" DockPanel.Dock="Right" Style="{StaticResource IconButton}" Width="30" Height="30"
                               Checked="OnEyedropperChecked" Unchecked="OnEyedropperUnchecked">
@@ -193,5 +195,6 @@
                 <Button x:Name="OkButton" Click="OnOkClick" Style="{StaticResource AccentButton}" MinWidth="80" />
             </StackPanel>
         </StackPanel>
+        </ScrollViewer>
     </Border>
 </UserControl>

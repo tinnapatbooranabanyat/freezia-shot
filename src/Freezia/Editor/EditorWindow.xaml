@@ -6,6 +6,7 @@
         FontFamily="{StaticResource UiFont}" FontSize="13"
         MinWidth="1160" MinHeight="560" Width="1200" Height="800"
         UseLayoutRounding="True" TextOptions.TextFormattingMode="Display"
+        AllowDrop="True" PreviewDragOver="OnFileDragOver" PreviewDrop="OnFileDrop"
         Icon="pack://application:,,,/Freezia;component/Assets/app.ico">
     <Window.Resources>
         <!-- tool icons: stroke paths bound to the button foreground -->

@@ -222,10 +222,43 @@ public partial class EditorWindow : Window
         _dirty = false;
     }
 
+    private string? _sourcePath;
+
+    /// <summary>File the image was opened from (null for screen captures).</summary>
+    public string? SourcePath
+    {
+        get => _sourcePath;
+        set { _sourcePath = value; UpdateTitle(); }
+    }
+
+    private void UpdateTitle()
+    {
+        string size = $"({_image.Width} × {_image.Height})";
+        Title = _sourcePath != null
+            ? $"{System.IO.Path.GetFileName(_sourcePath)}  {size} — {Strings.EditorTitle}"
+            : $"{Strings.EditorTitle}  {size}";
+    }
+
+    /// <summary>Image files dropped on the editor open in their own editor windows.</summary>
+    private void OnFileDragOver(object sender, DragEventArgs e)
+    {
+        bool ok = e.Data.GetDataPresent(DataFormats.FileDrop) &&
+                  e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Any(Core.ImageLoader.IsSupported);
+        e.Effects = ok ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void OnFileDrop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.FileDrop) is string[] files)
+            App.Current.OpenImageFiles(files.Where(Core.ImageLoader.IsSupported));
+        e.Handled = true;
+    }
+
     /// <summary>All UI text (re-run when the language changes while the window is open).</summary>
     private void ApplyLanguage()
     {
-        Title = $"{Strings.EditorTitle}  ({_image.Width} × {_image.Height})";
+        UpdateTitle();
         ToolSelect.ToolTip = Strings.ToolSelect;
         ToolBrush.ToolTip = Strings.ToolBrush;
         ToolHighlighter.ToolTip = Strings.ToolHighlighter;
@@ -864,7 +897,7 @@ public partial class EditorWindow : Window
         ExportRoot.Width = img.Width;
         ExportRoot.Height = img.Height;
         ImageInfo.Text = $"{img.Width} × {img.Height} px";
-        Title = $"{Strings.EditorTitle}  ({img.Width} × {img.Height})";
+        UpdateTitle();
         Select(null);
         UpdateSpotlights();
         Dispatcher.BeginInvoke(InitialZoom, DispatcherPriority.Loaded);
@@ -1258,6 +1291,7 @@ public partial class EditorWindow : Window
 
         PickerPopup.PlacementTarget = target == ColorTarget.Stroke ? StrokeTarget : FillTarget;
         Picker.Begin(_pickerOriginalColor, target == ColorTarget.Stroke ? Strings.StrokeColor : Strings.FillColor);
+        Picker.FitToScreen((FrameworkElement)PickerPopup.PlacementTarget);
         PickerPopup.IsOpen = true;
         Dispatcher.BeginInvoke(() => Picker.OkButton.Focus(), DispatcherPriority.Input);
     }
@@ -1454,6 +1488,7 @@ public partial class EditorWindow : Window
                 case Key.C: Copy(); break;
                 case Key.Delete when shift: ClearAll(); break;
                 case Key.S when shift: SaveAs(); break;
+                case Key.O: App.Current.OpenImageDialog(this); break;
                 case Key.S: Save(); break;
                 case Key.D0 or Key.NumPad0: ApplyZoom(FitZoom(), null); break;
                 case Key.D1 or Key.NumPad1: ApplyZoom(1.0, null); break;
@@ -1687,6 +1722,6 @@ public partial class EditorWindow : Window
     {
         var img = RenderOutput();
         _controller.Remember(img);
-        if (_controller.SaveAs(img, this) != null) _dirty = false;
+        if (_controller.SaveAs(img, this, SourcePath) != null) _dirty = false;
     }
 }

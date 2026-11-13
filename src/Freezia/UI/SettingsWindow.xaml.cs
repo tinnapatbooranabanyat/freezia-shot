@@ -327,6 +327,7 @@ public partial class SettingsWindow : Window
         var start = _customBg ?? ThemeManager.Current.Bg;
         AccentPopup.PlacementTarget = _customThemeCard;
         AccentPicker.Begin(start, Strings.ThemeCustom);
+        AccentPicker.FitToScreen(_customThemeCard!);
         AccentPopup.IsOpen = true;
         PreviewCustomBackground(start);
     }
@@ -425,6 +426,7 @@ public partial class SettingsWindow : Window
         _accentBeforePicker = _accent;
         AccentPopup.PlacementTarget = _customSwatch;
         AccentPicker.Begin(_accent ?? ThemeManager.Current.Accent, Strings.SettingsAccent);
+        AccentPicker.FitToScreen(_customSwatch!);
         AccentPopup.IsOpen = true;
     }
 

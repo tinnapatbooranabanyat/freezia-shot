@@ -73,10 +73,15 @@ thai.OtherOptions=ตัวเลือกเพิ่มเติม:
 english.OtherOptions=Other options:
 thai.InstallingVCRedist=กำลังติดตั้ง Microsoft Visual C++ Runtime (ใช้สำหรับ OCR)…
 english.InstallingVCRedist=Installing the Microsoft Visual C++ Runtime (used for OCR)…
+thai.ContextMenuTask=เพิ่ม "แก้ไขด้วย Freezia" ในเมนูคลิกขวาของไฟล์ภาพ
+english.ContextMenuTask=Add "Edit with Freezia" to the right-click menu of image files
+thai.EditWithFreezia=แก้ไขด้วย Freezia
+english.EditWithFreezia=Edit with Freezia
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "startup"; Description: "{cm:StartWithWindows}"; GroupDescription: "{cm:OtherOptions}"; Flags: unchecked
+Name: "contextmenu"; Description: "{cm:ContextMenuTask}"; GroupDescription: "{cm:OtherOptions}"
 
 [Files]
 ; Self-contained single-file build: no .NET runtime needed on the target PC.
@@ -92,6 +97,12 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 ; Same value the app's "start with Windows" setting writes (per user).
 Root: HKCU; Subkey: "{#RunKey}"; ValueType: string; ValueName: "{#AppName}"; \
     ValueData: """{app}\{#AppExe}"" --autostart"; Flags: uninsdeletevalue; Tasks: startup
+
+; Explorer right-click on any image file (Windows 11: under "Show more options").
+; HKA = HKLM for an all-users install, HKCU for a just-me install.
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\image\shell\Freezia.Edit"; ValueType: string; ValueName: "";     ValueData: "{cm:EditWithFreezia}"; Flags: uninsdeletekey; Tasks: contextmenu
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\image\shell\Freezia.Edit"; ValueType: string; ValueName: "Icon";     ValueData: """{app}\{#AppExe}"",0"; Tasks: contextmenu
+Root: HKA; Subkey: "Software\Classes\SystemFileAssociations\image\shell\Freezia.Edit\command"; ValueType: string; ValueName: "";     ValueData: """{app}\{#AppExe}"" --edit ""%1"""; Tasks: contextmenu
 
 ; Language picked in Setup becomes the app's language on first run (removed on uninstall).
 Root: HKCU; Subkey: "Software\{#AppName}"; ValueType: string; ValueName: "InstallerLanguage"; ValueData: "{language}";     Flags: uninsdeletekey

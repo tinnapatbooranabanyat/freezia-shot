@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
@@ -30,6 +32,8 @@ public partial class App : Application
         RegisterCrashHandlers();
 
         bool exitRequest = e.Args.Any(a => string.Equals(a, "--exit", StringComparison.OrdinalIgnoreCase));
+        // "Freezia.exe --edit <file>" (Explorer: Edit with Freezia) or files dropped on the exe
+        var files = e.Args.Where(a => !a.StartsWith("--", StringComparison.Ordinal) && File.Exists(a)).Select(Path.GetFullPath).ToList();
 
         _instance = new SingleInstance();
         if (!_instance.IsFirstInstance)
@@ -40,7 +44,7 @@ public partial class App : Application
                 SingleInstance.Signal(AppInfo.ExitEventName);
                 _instance.WaitForOtherToExit(TimeSpan.FromSeconds(10));
             }
-            else
+            else if (files.Count == 0 || !SingleInstance.QueueOpen(files))
             {
                 SingleInstance.Signal(AppInfo.ActivateEventName);
             }
@@ -69,7 +73,8 @@ public partial class App : Application
         _instance.Listen(
             // launching Freezia again while it runs opens the settings window
             onActivate: () => Dispatcher.BeginInvoke(OpenSettings),
-            onExit: () => Dispatcher.BeginInvoke(ExitApp));
+            onExit: () => Dispatcher.BeginInvoke(ExitApp),
+            onOpen: () => Dispatcher.BeginInvoke(() => OpenImageFiles(SingleInstance.TakeQueued())));
 
         _tray = new TrayIcon(Settings.Current);
         _tray.UpdateHotkeys(Settings.Current);
@@ -81,6 +86,8 @@ public partial class App : Application
         _tray.ExitRequested += ExitApp;
         _tray.OpenHistory += OpenHistory;
         _tray.PickColor += () => _capture?.PickColor();
+        _tray.OpenImage += () => OpenImageDialog();
+        _tray.EditClipboard += EditClipboardImage;
         _tray.OpenUpdate += () => { if (_updates.Available is UpdateInfo u) OpenUpdate(u); };
 
         _hotkeys = new HotkeyManager(Dispatcher);
@@ -93,6 +100,8 @@ public partial class App : Application
         _capture.OpenEditor = OpenEditor;
 
         StartUpdateChecks();
+        SingleInstance.TakeQueued(); // stale requests from a previous session
+        if (files.Count > 0) Dispatcher.BeginInvoke(() => OpenImageFiles(files), DispatcherPriority.ApplicationIdle);
 
         Settings.Changed += (_, _) =>
         {
@@ -212,11 +221,75 @@ public partial class App : Application
 
     public void CaptureAllScreens() => _capture?.CaptureAllScreens();
 
-    private void OpenEditor(PixelImage image)
+    // ---- Editing images that were not captured ----
+
+    /// <summary>Choose image files and open each in the editor.</summary>
+    public void OpenImageDialog(Window? owner = null)
+    {
+        var dlg = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = Strings.OpenImageTitle,
+            Filter = ImageLoader.DialogFilter,
+            Multiselect = true,
+            InitialDirectory = SafeFolder(),
+        };
+        bool wasSuspended = _hotkeys?.Suspended ?? false;
+        if (_hotkeys != null) _hotkeys.Suspended = true;
+        bool? ok;
+        try { ok = owner != null ? dlg.ShowDialog(owner) : dlg.ShowDialog(); }
+        finally { if (_hotkeys != null) _hotkeys.Suspended = wasSuspended; }
+        if (ok == true) OpenImageFiles(dlg.FileNames);
+    }
+
+    private static string SafeFolder()
+    {
+        try { return KnownFolders.ResolveSaveFolder(Settings.Current); }
+        catch { return Environment.GetFolderPath(Environment.SpecialFolder.MyPictures); }
+    }
+
+    public void OpenImageFiles(IEnumerable<string> paths)
+    {
+        foreach (var path in paths.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct(StringComparer.OrdinalIgnoreCase).Take(10))
+        {
+            try
+            {
+                var image = ImageLoader.Load(path);
+                OpenEditor(image, path);
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"Opening {path} failed", ex);
+                ToastWindow.ShowToast(Strings.OpenImageFailed, $"{Path.GetFileName(path)}: {ex.Message}", error: true);
+            }
+        }
+    }
+
+    public void EditClipboardImage()
     {
         try
         {
-            var editor = new Freezia.Editor.EditorWindow(image, _capture!, Settings);
+            var image = ImageLoader.FromClipboard();
+            if (image == null)
+            {
+                ToastWindow.ShowToast(Strings.ClipboardNoImage, error: true);
+                return;
+            }
+            OpenEditor(image);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Editing the clipboard image failed", ex);
+            ToastWindow.ShowToast(Strings.OpenImageFailed, ex.Message, error: true);
+        }
+    }
+
+    private void OpenEditor(PixelImage image) => OpenEditor(image, null);
+
+    private void OpenEditor(PixelImage image, string? sourcePath)
+    {
+        try
+        {
+            var editor = new Freezia.Editor.EditorWindow(image, _capture!, Settings) { SourcePath = sourcePath };
             editor.Show();
             Freezia.Native.NativeMethods.ForceForeground(new System.Windows.Interop.WindowInteropHelper(editor).Handle);
             editor.Activate();

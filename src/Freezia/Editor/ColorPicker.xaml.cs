@@ -27,6 +27,41 @@ public partial class ColorPicker : UserControl
     /// <summary>true = start eyedropper mode on the canvas, false = stop.</summary>
     public event Action<bool>? EyedropperToggled;
 
+    private const double SvFullHeight = 150, SvMinHeight = 70;
+
+    /// <summary>
+    /// Keep the whole picker (OK / Cancel included) on the monitor of <paramref name="target"/>: on short
+    /// screens the color square gets smaller, and if that is not enough the card scrolls.
+    /// Call right after opening the popup.
+    /// </summary>
+    public void FitToScreen(FrameworkElement target)
+    {
+        try
+        {
+            if (PresentationSource.FromVisual(target) is not { CompositionTarget: { } ct }) return;
+            double scale = ct.TransformToDevice.M22;
+            var center = target.PointToScreen(new Point(target.ActualWidth / 2, target.ActualHeight / 2));
+            var mon = Freezia.Capture.Monitors.FromPoint((int)center.X, (int)center.Y);
+            FitToHeight(mon.WorkArea.Height / scale - 2 * 12 - 8); // card margin + a little air
+        }
+        catch (Exception ex)
+        {
+            Freezia.Core.Logger.Error("Color picker fit failed", ex);
+        }
+    }
+
+    /// <summary>Make the card at most <paramref name="available"/> DIPs tall (see <see cref="FitToScreen"/>).</summary>
+    public void FitToHeight(double available)
+    {
+        SvArea.Height = SvFullHeight;
+        Card.MaxHeight = double.PositiveInfinity;
+        Card.Measure(new Size(Card.Width, double.PositiveInfinity));
+        double natural = Card.DesiredSize.Height;
+        if (natural > available)
+            SvArea.Height = Math.Max(SvMinHeight, SvFullHeight - (natural - available));
+        Card.MaxHeight = Math.Max(200, available);
+    }
+
     public ColorPicker()
     {
         InitializeComponent();
