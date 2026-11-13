@@ -195,6 +195,18 @@ jobs:
             "$($_.Name)  $([math]::Round($_.Length / 1MB, 1)) MB  signature: $($s.Status)"
             if ($env:SIGN -eq 'true' -and $s.Status -ne 'Valid') { throw "$($_.Name) is not validly signed" }
           }
+          # release notes: say honestly whether this build is signed
+          $policy = "https://github.com/$env:GITHUB_REPOSITORY#code-signing-policy"
+          $signing = if ($env:SIGN -eq 'true') {
+            "Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org). See the [code signing policy]($policy)."
+          } else {
+            "This build is **not code-signed** yet. Code signing through the [SignPath Foundation](https://signpath.org) is being set up (see the [code signing policy]($policy)). Until then, Windows SmartScreen may warn and Smart App Control may block the installer."
+          }
+          @(
+            'Download the `Freezia-Setup-*.exe` file below and run it (Windows 10 1809+ / Windows 11, x64).',
+            '',
+            $signing
+          ) | Set-Content -Encoding utf8 notes.md
 
       - name: Upload installer
         uses: actions/upload-artifact@v7
@@ -208,8 +220,4 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           files: release/*.exe
-          body: |
-            Download the `Freezia-Setup-*.exe` file below and run it (Windows 10 1809+ / Windows 11, x64).
-
-            Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
-            See the [code signing policy](https://github.com/${{ github.repository }}#code-signing-policy).
+          body_path: notes.md
