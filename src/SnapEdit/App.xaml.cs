@@ -56,7 +56,8 @@ public partial class App : Application
         Settings.Load();
 
         _instance.Listen(
-            onActivate: () => Dispatcher.BeginInvoke(() => ToastWindow.ShowToast(Strings.AlreadyRunning)),
+            // launching SnapEdit again while it runs opens the settings window
+            onActivate: () => Dispatcher.BeginInvoke(OpenSettings),
             onExit: () => Dispatcher.BeginInvoke(ExitApp));
 
         _tray = new TrayIcon();
@@ -134,9 +135,21 @@ public partial class App : Application
         }
     }
 
+    private SettingsWindow? _settingsWindow;
+
     public void OpenSettings()
     {
-        Logger.Info("OpenSettings requested");
+        if (_settingsWindow != null)
+        {
+            if (_settingsWindow.WindowState == WindowState.Minimized) _settingsWindow.WindowState = WindowState.Normal;
+            _settingsWindow.Activate();
+            return;
+        }
+        _settingsWindow = new SettingsWindow(Settings);
+        _settingsWindow.Closed += (_, _) => _settingsWindow = null;
+        _settingsWindow.Show();
+        SnapEdit.Native.NativeMethods.ForceForeground(new System.Windows.Interop.WindowInteropHelper(_settingsWindow).Handle);
+        _settingsWindow.Activate();
     }
 
     public void ExitApp()

@@ -20,7 +20,7 @@ public static class Strings
     public const string HotkeyNone = "ไม่ได้ตั้ง";
     public const string HotkeyPressKeys = "กดปุ่มที่ต้องการ…";
     public const string HotkeyDuplicate = "ปุ่มลัดนี้ถูกใช้กับ \"{0}\" แล้ว";
-    public const string HotkeyNeedKey = "ต้องมีปุ่มหลักอย่างน้อย 1 ปุ่ม (ไม่ใช่แค่ Ctrl/Shift/Alt/Win)";
+    public const string HotkeyNeedsModifier = "ปุ่มนี้ใช้เดี่ยวๆ ไม่ได้เพราะจะรบกวนการพิมพ์ — กดร่วมกับ Ctrl / Shift / Alt / Win";
 
     // Capture overlay
     public const string OverlayFullScreen = "เต็มจอนี้";
