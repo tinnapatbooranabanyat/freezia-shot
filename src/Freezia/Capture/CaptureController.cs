@@ -130,9 +130,11 @@ public sealed class CaptureController
 
     public bool Copy(BitmapSource image)
     {
-        if (ClipboardHelper.SetImage(image))
+        string? name = ClipboardHelper.SetImageWithFile(image, out bool ok);
+        if (ok)
         {
-            ToastWindow.ShowToast(Strings.ToastCopied, $"{image.PixelWidth} × {image.PixelHeight} px",
+            string size = $"{image.PixelWidth} × {image.PixelHeight} px";
+            ToastWindow.ShowToast(Strings.ToastCopied, name == null ? size : $"{name} • {size}",
                 revealPath: SafeSaveFolder(), thumb: image);
             return true;
         }

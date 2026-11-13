@@ -300,7 +300,9 @@ public partial class SettingsWindow : Window
             var p = Preview(ThemeManager.FromBackground(_customBg.Value), new CornerRadius(8));
             p.Width = 88;
             p.Height = 56;
-            stack.Children[0] = p;
+            // a UIElementCollection slot can't be overwritten: remove, then insert
+            stack.Children.RemoveAt(0);
+            stack.Children.Insert(0, p);
             _customThemeCard.IsChecked = true;
         }
         RefreshAccentDefaultSwatch();

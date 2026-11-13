@@ -5,7 +5,7 @@
         xmlns:ed="clr-namespace:Freezia.Editor"
         Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}"
         FontFamily="{StaticResource UiFont}" FontSize="13"
-        Width="640" Height="800" MinWidth="560" MinHeight="520"
+        Width="860" Height="820" MinWidth="620" MinHeight="520"
         UseLayoutRounding="True" TextOptions.TextFormattingMode="Display"
         Icon="pack://application:,,,/Freezia;component/Assets/app.ico">
     <Window.Resources>
