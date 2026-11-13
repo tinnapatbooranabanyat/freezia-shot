@@ -68,6 +68,9 @@ public static class Strings
     public static string ToolEllipse => T("วงกลม/วงรี (O) — กด Shift = วงกลม", "Ellipse (O) — Shift = circle");
     public static string ToolText => T("ข้อความ (T)", "Text (T)");
     public static string ToolMosaic => T("โมเสกปิดข้อมูล (M)", "Mosaic / redact (M)");
+    public static string ToolEraser => T("ยางลบ (E) — ลบเฉพาะสิ่งที่วาด ภาพหน้าจอไม่ถูกลบ", "Eraser (E) — erases drawings only, never the screenshot");
+    public static string EraserSize => T("ขนาดยางลบ", "Eraser size");
+    public static string ClearAll => T("ล้างทั้งหมด (Ctrl+Shift+Delete)", "Clear all (Ctrl+Shift+Delete)");
     public static string ToolStep => T("ตัวเลขลำดับ (N)", "Numbered step (N)");
     public static string StrokeColor => T("สีเส้น", "Stroke color");
     public static string FillColor => T("สีเติม", "Fill color");

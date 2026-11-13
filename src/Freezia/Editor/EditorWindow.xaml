@@ -141,12 +141,17 @@
                                        Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ButtonBase}}" />
                         </Grid>
                     </RadioButton>
+                    <Border Style="{StaticResource ToolSeparator}" Margin="6,8" />
+                    <RadioButton x:Name="ToolEraser" Style="{StaticResource ToolButton}" GroupName="tools" Content="&#xE75C;" />
                 </StackPanel>
 
                 <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
                     <Button x:Name="UndoButton" Style="{StaticResource IconButton}" Content="&#xE7A7;" Click="OnUndo" />
                     <Button x:Name="RedoButton" Style="{StaticResource IconButton}" Content="&#xE7A6;" Click="OnRedo" />
                     <Button x:Name="DeleteButton" Style="{StaticResource IconButton}" Content="&#xE74D;" Click="OnDelete" />
+                    <Button x:Name="ClearAllButton" Style="{StaticResource IconButton}" Click="OnClearAll">
+                        <Path Style="{StaticResource ToolIcon}" Data="M3,4.5 H17 V15.5 H3 Z M7.5,7.5 L12.5,12.5 M12.5,7.5 L7.5,12.5" />
+                    </Button>
                     <Border Style="{StaticResource ToolSeparator}" Margin="8,8" />
                     <Button x:Name="CopyButton" Click="OnCopy" Padding="12,7" Margin="0,0,6,0">
                         <StackPanel Orientation="Horizontal">

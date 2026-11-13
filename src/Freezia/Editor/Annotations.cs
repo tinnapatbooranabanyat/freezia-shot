@@ -21,6 +21,7 @@ public enum EditorTool
     Text,
     Mosaic,
     Step,
+    Eraser,
 }
 
 /// <summary>Visual style of an annotation. Immutable so it can be stored in undo commands.</summary>
@@ -78,13 +79,79 @@ public abstract class Annotation
         }
     }
 
-    /// <summary>Hit test in image coordinates.</summary>
-    public virtual bool HitTest(Point p)
+    /// <summary>Hit test in image coordinates (erased parts don't count).</summary>
+    public bool HitTest(Point p)
+    {
+        if (!HitTestCore(p)) return false;
+        if (_erasures.Count == 0) return true;
+        // the point must lie in a part of the object that is still visible
+        return Element.Clip?.FillContains(ToLocal(p)) ?? true;
+    }
+
+    protected virtual bool HitTestCore(Point p)
     {
         var b = Bounds;
         if (b.IsEmpty) return false;
         b.Inflate(3, 3);
         return b.Contains(p);
+    }
+
+    // ---------------------------------------------------------------- eraser support
+
+    private readonly List<Geometry> _erasures = new();
+
+    /// <summary>Erased regions, in the element's own (pre-transform) coordinates, so they move with the object.</summary>
+    public bool HasErasures => _erasures.Count > 0;
+
+    /// <summary>Origin of the element's local coordinate space in image coordinates.</summary>
+    private Vector LocalOrigin
+    {
+        get
+        {
+            double left = Canvas.GetLeft(Element), top = Canvas.GetTop(Element);
+            var v = new Vector(double.IsNaN(left) ? 0 : left, double.IsNaN(top) ? 0 : top);
+            return UsesTranslate ? v + _offset : v;
+        }
+    }
+
+    private Point ToLocal(Point imagePoint) => imagePoint - LocalOrigin;
+
+    /// <summary>Convert an image-space eraser shape to this element's local space.</summary>
+    public Geometry ToLocal(Geometry imageSpace)
+    {
+        var o = LocalOrigin;
+        var g = imageSpace.Clone();
+        g.Transform = new TranslateTransform(-o.X, -o.Y);
+        g.Freeze();
+        return g;
+    }
+
+    public void AddErasure(Geometry localGeometry)
+    {
+        _erasures.Add(localGeometry);
+        UpdateClip();
+    }
+
+    public void RemoveErasure(Geometry localGeometry)
+    {
+        _erasures.Remove(localGeometry);
+        UpdateClip();
+    }
+
+    /// <summary>Clip = everything minus the erased shapes (vector clip: crisp, no intermediate bitmaps).</summary>
+    private void UpdateClip()
+    {
+        if (_erasures.Count == 0)
+        {
+            Element.Clip = null;
+            return;
+        }
+        var erased = new GeometryGroup { FillRule = FillRule.Nonzero };
+        foreach (var g in _erasures) erased.Children.Add(g);
+        var everything = new RectangleGeometry(new Rect(-50000, -50000, 100000, 100000));
+        var visible = new CombinedGeometry(GeometryCombineMode.Exclude, everything, erased);
+        visible.Freeze();
+        Element.Clip = visible;
     }
 
     public virtual bool UsesStroke => true;
@@ -180,7 +247,7 @@ public sealed class StrokeAnnotation : Annotation
         }
     }
 
-    public override bool HitTest(Point p) => _geometry.StrokeContains(HitPen(Width), p - Offset);
+    protected override bool HitTestCore(Point p) => _geometry.StrokeContains(HitPen(Width), p - Offset);
 }
 
 // ---------------------------------------------------------------- line & arrow
@@ -267,7 +334,7 @@ public sealed class LineAnnotation : Annotation
         }
     }
 
-    public override bool HitTest(Point p)
+    protected override bool HitTestCore(Point p)
     {
         var q = p - Offset;
         return _geometry.StrokeContains(HitPen(Style.Thickness), q) || (IsArrow && _geometry.FillContains(q));
@@ -324,7 +391,7 @@ public sealed class ShapeAnnotation : Annotation
 
     public override Rect LocalBounds => Rect;
 
-    public override bool HitTest(Point p)
+    protected override bool HitTestCore(Point p)
     {
         var q = p - Offset;
         if (Style.FillOn && _geometry.FillContains(q)) return true;
@@ -435,7 +502,7 @@ public sealed class StepAnnotation : Annotation
         }
     }
 
-    public override bool HitTest(Point p) => (p - Offset - Center).Length <= Diameter / 2 + 3;
+    protected override bool HitTestCore(Point p) => (p - Offset - Center).Length <= Diameter / 2 + 3;
 }
 
 // ---------------------------------------------------------------- mosaic (redaction)

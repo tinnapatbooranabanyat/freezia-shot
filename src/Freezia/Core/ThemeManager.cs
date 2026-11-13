@@ -64,17 +64,27 @@ public static class ThemeManager
         var app = Application.Current;
         if (app == null) return;
         var dicts = app.Resources.MergedDictionaries;
-        var current = dicts.FirstOrDefault(d => d.Source != null && d.Source.OriginalString.Contains("/Themes/Colors."));
-        bool changed = dark != IsDark || current == null;
+        // App.xaml may reference the palette with a relative URI ("Themes/Colors.Dark.xaml"),
+        // so match on the file name. Later merged dictionaries win, so the old palette must be removed,
+        // not just shadowed by inserting a new one in front of it.
+        var palettes = dicts.Where(IsPalette).ToList();
+        bool showsDark = palettes.Count == 1 && palettes[0].Source!.OriginalString.Contains("Colors.Dark.xaml", StringComparison.OrdinalIgnoreCase);
+        bool showsLight = palettes.Count == 1 && palettes[0].Source!.OriginalString.Contains("Colors.Light.xaml", StringComparison.OrdinalIgnoreCase);
         IsDark = dark;
-        if (!changed) return;
+        if ((dark && showsDark) || (!dark && showsLight)) return;
 
-        var next = new ResourceDictionary { Source = new Uri(dark ? DarkUri : LightUri, UriKind.Absolute) };
-        if (current != null) dicts[dicts.IndexOf(current)] = next;
-        else dicts.Insert(0, next);
+        foreach (var d in palettes) dicts.Remove(d);
+        dicts.Insert(0, new ResourceDictionary { Source = new Uri(dark ? DarkUri : LightUri, UriKind.Absolute) });
 
         foreach (Window w in app.Windows) WindowHelper.ApplyChrome(w);
         Changed?.Invoke();
+    }
+
+    private static bool IsPalette(ResourceDictionary d)
+    {
+        string? src = d.Source?.OriginalString;
+        return src != null && (src.EndsWith("Colors.Dark.xaml", StringComparison.OrdinalIgnoreCase)
+                            || src.EndsWith("Colors.Light.xaml", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>Windows "Choose your app mode" (Personalize › AppsUseLightTheme = 0 means dark).</summary>

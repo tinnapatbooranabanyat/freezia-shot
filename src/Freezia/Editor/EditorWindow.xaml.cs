@@ -49,6 +49,12 @@ public partial class EditorWindow : Window
     private Annotation? _selected;
     private readonly Rectangle _selectionOutline;
 
+    // eraser
+    private readonly Ellipse _eraserCursor;
+    private bool _erasing;
+    private readonly List<Point> _erasePoints = new();
+    private readonly Dictionary<Annotation, Geometry> _eraseApplied = new();
+
     // drag state
     private Annotation? _drawing;
     private Point _dragStart;
@@ -105,6 +111,14 @@ public partial class EditorWindow : Window
             Visibility = Visibility.Collapsed,
         };
         AdornerLayer.Children.Add(_selectionOutline);
+        _eraserCursor = new Ellipse
+        {
+            Stroke = (Brush)FindResource("AccentBrush"),
+            Fill = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF)),
+            Visibility = Visibility.Collapsed,
+        };
+        AdornerLayer.Children.Add(_eraserCursor);
+        Pad.MouseLeave += (_, _) => _eraserCursor.Visibility = Visibility.Collapsed;
 
         _toolButtons = new()
         {
@@ -118,6 +132,7 @@ public partial class EditorWindow : Window
             [EditorTool.Text] = ToolText,
             [EditorTool.Mosaic] = ToolMosaic,
             [EditorTool.Step] = ToolStep,
+            [EditorTool.Eraser] = ToolEraser,
         };
         foreach (var (tool, rb) in _toolButtons)
         {
@@ -152,7 +167,7 @@ public partial class EditorWindow : Window
         Pad.MouseLeftButtonDown += OnCanvasDown;
         Pad.MouseMove += OnCanvasMove;
         Pad.MouseLeftButtonUp += OnCanvasUp;
-        Pad.LostMouseCapture += (_, _) => { if (_drawing != null || _moving) FinishDrag(); };
+        Pad.LostMouseCapture += (_, _) => { if (_drawing != null || _moving || _erasing) FinishDrag(); };
         Scroller.PreviewMouseWheel += OnWheel;
         PreviewKeyDown += OnPreviewKeyDown;
         PreviewMouseDown += OnWindowPreviewMouseDown;
@@ -196,6 +211,8 @@ public partial class EditorWindow : Window
         ToolText.ToolTip = Strings.ToolText;
         ToolMosaic.ToolTip = Strings.ToolMosaic;
         ToolStep.ToolTip = Strings.ToolStep;
+        ToolEraser.ToolTip = Strings.ToolEraser;
+        ClearAllButton.ToolTip = Strings.ClearAll;
         UndoButton.ToolTip = Strings.Undo;
         RedoButton.ToolTip = Strings.Redo;
         DeleteButton.ToolTip = Strings.Delete;
@@ -287,6 +304,7 @@ public partial class EditorWindow : Window
             EditorTool.Text => Cursors.IBeam,
             _ => Cursors.Cross,
         };
+        if (tool != EditorTool.Eraser) _eraserCursor.Visibility = Visibility.Collapsed;
         UpdateStyleUi();
     }
 
@@ -393,6 +411,14 @@ public partial class EditorWindow : Window
                     BeginTextEdit(p, null);
                 break;
             }
+            case EditorTool.Eraser:
+                _erasing = true;
+                _erasePoints.Clear();
+                _erasePoints.Add(p);
+                _eraseApplied.Clear();
+                UpdateErase();
+                Pad.CaptureMouse();
+                break;
             case EditorTool.Step:
             {
                 if (!InsideImage(p)) break;
@@ -420,6 +446,17 @@ public partial class EditorWindow : Window
         else if (PickerPopup.IsOpen && Picker.IsEyedropperActive)
             CursorInfo.Text = $"X: {(int)p.X}  Y: {(int)p.Y}   {ColorUtil.ToHex6(_image.GetPixel((int)p.X, (int)p.Y))}";
         else CursorInfo.Text = $"X: {(int)p.X}  Y: {(int)p.Y}";
+
+        if (_tool == EditorTool.Eraser) UpdateEraserCursor(p);
+        if (_erasing)
+        {
+            if ((p - _erasePoints[^1]).LengthSquared >= 1)
+            {
+                _erasePoints.Add(p);
+                UpdateErase();
+            }
+            return;
+        }
 
         if (_moving && _selected != null)
         {
@@ -454,6 +491,11 @@ public partial class EditorWindow : Window
 
     private void OnCanvasUp(object sender, MouseButtonEventArgs e)
     {
+        if (_erasing)
+        {
+            FinishDrag();
+            return;
+        }
         if (_drawing != null || _moving)
         {
             var p = ImagePoint(e);
@@ -464,6 +506,18 @@ public partial class EditorWindow : Window
 
     private void FinishDrag()
     {
+        if (_erasing)
+        {
+            _erasing = false;
+            var applied = new Dictionary<Annotation, Geometry>(_eraseApplied);
+            _eraseApplied.Clear();
+            if (applied.Count > 0)
+            {
+                _undo.Push("erase",
+                    () => { foreach (var (a, g) in applied) a.RemoveErasure(g); UpdateAdorner(); },
+                    () => { foreach (var (a, g) in applied) a.AddErasure(g); UpdateAdorner(); });
+            }
+        }
         if (_moving && _selected != null)
         {
             var a = _selected;
@@ -546,6 +600,70 @@ public partial class EditorWindow : Window
         _undo.Push("add", () => RemoveItem(a), () => AddItem(a, index));
     }
 
+    // ================================================================ eraser + clear all
+
+    private double EraserSize => _thickness * 3 + 6;
+
+    private void UpdateEraserCursor(Point p)
+    {
+        double d = EraserSize;
+        double scale = ZoomTransform.ScaleX > 0 ? ZoomTransform.ScaleX : 1;
+        _eraserCursor.Width = _eraserCursor.Height = d;
+        _eraserCursor.StrokeThickness = 1.5 / scale;
+        Canvas.SetLeft(_eraserCursor, p.X - d / 2);
+        Canvas.SetTop(_eraserCursor, p.Y - d / 2);
+        _eraserCursor.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>
+    /// Re-apply the whole current eraser stroke to every drawing it touches. Each object keeps the
+    /// erased shape in its own coordinates (a clip), so the screenshot itself is never erased.
+    /// </summary>
+    private void UpdateErase()
+    {
+        var line = new StreamGeometry();
+        using (var ctx = line.Open())
+        {
+            ctx.BeginFigure(_erasePoints[0], false, false);
+            if (_erasePoints.Count == 1) ctx.LineTo(_erasePoints[0] + new Vector(0.01, 0), true, true);
+            else ctx.PolyLineTo(_erasePoints.GetRange(1, _erasePoints.Count - 1), true, true);
+        }
+        var pen = new Pen(Brushes.Black, EraserSize)
+        {
+            StartLineCap = PenLineCap.Round,
+            EndLineCap = PenLineCap.Round,
+            LineJoin = PenLineJoin.Round,
+        };
+        Geometry shape = line.GetWidenedPathGeometry(pen);
+        shape.Freeze();
+        var bounds = shape.Bounds;
+
+        foreach (var a in _items)
+        {
+            bool touched = _eraseApplied.ContainsKey(a) || (a.Element.Visibility == Visibility.Visible && a.Bounds.IntersectsWith(bounds));
+            if (!touched) continue;
+            if (_eraseApplied.TryGetValue(a, out var old)) a.RemoveErasure(old);
+            var local = a.ToLocal(shape);
+            a.AddErasure(local);
+            _eraseApplied[a] = local;
+        }
+    }
+
+    private void OnClearAll(object sender, RoutedEventArgs e) => ClearAll();
+
+    /// <summary>Remove every drawing in one undoable step.</summary>
+    private void ClearAll()
+    {
+        CommitText();
+        FlushPendingStyle();
+        if (_items.Count == 0) return;
+        var snapshot = _items.ToList();
+        Select(null);
+        _undo.Do("clear all",
+            () => { for (int i = 0; i < snapshot.Count; i++) AddItem(snapshot[i], i); },
+            () => { foreach (var a in snapshot) RemoveItem(a); });
+    }
+
     private void DeleteSelected()
     {
         if (_selected == null) return;
@@ -598,6 +716,7 @@ public partial class EditorWindow : Window
         UndoButton.IsEnabled = _undo.CanUndo;
         RedoButton.IsEnabled = _undo.CanRedo;
         DeleteButton.IsEnabled = _selected != null;
+        ClearAllButton.IsEnabled = _items.Count > 0;
     }
 
     private void OnUndo(object sender, RoutedEventArgs e) => DoUndo();
@@ -724,7 +843,7 @@ public partial class EditorWindow : Window
             }
             else
             {
-                SizeLabel.Text = Strings.Thickness;
+                SizeLabel.Text = _tool == EditorTool.Eraser && _selected == null ? Strings.EraserSize : Strings.Thickness;
                 SizeSlider.Minimum = 1;
                 SizeSlider.Maximum = 30;
                 SizeSlider.Value = _thickness;
@@ -1039,6 +1158,7 @@ public partial class EditorWindow : Window
                 case Key.Z: DoUndo(); break;
                 case Key.Y: DoRedo(); break;
                 case Key.C: Copy(); break;
+                case Key.Delete when shift: ClearAll(); break;
                 case Key.S when shift: SaveAs(); break;
                 case Key.S: Save(); break;
                 case Key.D0 or Key.NumPad0: ApplyZoom(FitZoom(), null); break;
@@ -1059,6 +1179,13 @@ public partial class EditorWindow : Window
                 break;
             case Key.Escape:
                 if (PickerPopup.IsOpen) Picker.Cancel();
+                else if (_erasing)
+                {
+                    foreach (var (a, g) in _eraseApplied) a.RemoveErasure(g);
+                    _eraseApplied.Clear();
+                    _erasing = false;
+                    if (Pad.IsMouseCaptured) Pad.ReleaseMouseCapture();
+                }
                 else if (_drawing != null) { var a = _drawing; _drawing = null; RemoveItem(a); if (Pad.IsMouseCaptured) Pad.ReleaseMouseCapture(); }
                 else Select(null);
                 break;
@@ -1072,6 +1199,7 @@ public partial class EditorWindow : Window
             case Key.T: SetTool(EditorTool.Text); break;
             case Key.M: SetTool(EditorTool.Mosaic); break;
             case Key.N: SetTool(EditorTool.Step); break;
+            case Key.E: SetTool(EditorTool.Eraser); break;
             case Key.Left or Key.Right or Key.Up or Key.Down when _selected != null:
                 NudgeSelected(key, shift ? 10 : 1);
                 break;
