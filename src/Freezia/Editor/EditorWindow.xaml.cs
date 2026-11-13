@@ -49,6 +49,14 @@ public partial class EditorWindow : Window
     private Annotation? _selected;
     private readonly Rectangle _selectionOutline;
 
+    // line / arrow endpoint handles: 1 = start, 2 = end
+    private readonly Ellipse _handleStart, _handleEnd;
+    private int _endpointDrag;
+    private Point _endpointFromStart, _endpointFromEnd;
+
+    // text tool: pressing on a text drags it, a click without dragging edits it
+    private TextAnnotation? _textClick;
+
     // crop
     private readonly Path _cropShade;
     private readonly Rectangle _cropFrame;
@@ -117,6 +125,10 @@ public partial class EditorWindow : Window
             Visibility = Visibility.Collapsed,
         };
         AdornerLayer.Children.Add(_selectionOutline);
+        _handleStart = MakeHandle();
+        _handleEnd = MakeHandle();
+        AdornerLayer.Children.Add(_handleStart);
+        AdornerLayer.Children.Add(_handleEnd);
         _eraserCursor = new Ellipse
         {
             Stroke = (Brush)FindResource("AccentBrush"),
@@ -180,7 +192,7 @@ public partial class EditorWindow : Window
         Pad.MouseLeftButtonDown += OnCanvasDown;
         Pad.MouseMove += OnCanvasMove;
         Pad.MouseLeftButtonUp += OnCanvasUp;
-        Pad.LostMouseCapture += (_, _) => { if (_drawing != null || _moving || _erasing) FinishDrag(); };
+        Pad.LostMouseCapture += (_, _) => { if (_drawing != null || _moving || _erasing || _endpointDrag != 0) FinishDrag(); };
         Scroller.PreviewMouseWheel += OnWheel;
         PreviewKeyDown += OnPreviewKeyDown;
         PreviewMouseDown += OnWindowPreviewMouseDown;
@@ -393,6 +405,18 @@ public partial class EditorWindow : Window
         bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
         _dragStart = p;
 
+        // drag an endpoint of the selected line / arrow (length and direction)
+        if (_tool is EditorTool.Select or EditorTool.Line or EditorTool.Arrow && HandleAt(p) is int handle and > 0)
+        {
+            var line = (LineAnnotation)_selected!;
+            _endpointDrag = handle;
+            _endpointFromStart = line.Start;
+            _endpointFromEnd = line.End;
+            Pad.CaptureMouse();
+            e.Handled = true;
+            return;
+        }
+
         switch (_tool)
         {
             case EditorTool.Select:
@@ -418,6 +442,7 @@ public partial class EditorWindow : Window
                 break;
             case EditorTool.Line:
             case EditorTool.Arrow:
+                Select(null);
                 StartDrawing(new LineAnnotation(CurrentStyle, p, _tool == EditorTool.Arrow));
                 break;
             case EditorTool.Rect:
@@ -442,7 +467,14 @@ public partial class EditorWindow : Window
             case EditorTool.Text:
             {
                 if (HitTest(p) is TextAnnotation existing)
-                    BeginTextEdit(existing.Origin + existing.Offset, existing);
+                {
+                    // drag = move it; click without dragging = edit it (see FinishDrag)
+                    Select(existing);
+                    _textClick = existing;
+                    _moving = true;
+                    _moveStartOffset = existing.Offset;
+                    Pad.CaptureMouse();
+                }
                 else if (InsideImage(p))
                     BeginTextEdit(p, null);
                 break;
@@ -501,6 +533,17 @@ public partial class EditorWindow : Window
             return;
         }
 
+        if (_endpointDrag != 0 && _selected is LineAnnotation dl)
+        {
+            var off = dl.Offset;
+            Point start = dl.Start + off, end = dl.End + off;
+            bool snap = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+            if (_endpointDrag == 1) start = snap ? SnapAngle(end, p) : p;
+            else end = snap ? SnapAngle(start, p) : p;
+            dl.SetPoints(start - off, end - off);
+            UpdateAdorner();
+            return;
+        }
         if (_moving && _selected != null)
         {
             _selected.Offset = _moveStartOffset + (p - _dragStart);
@@ -509,8 +552,7 @@ public partial class EditorWindow : Window
         }
         if (_drawing == null)
         {
-            if (_tool == EditorTool.Select && !Picker.IsEyedropperActive)
-                Pad.Cursor = HitTest(p) != null ? Cursors.SizeAll : Cursors.Arrow;
+            if (!Picker.IsEyedropperActive && HoverCursor(p) is Cursor c) Pad.Cursor = c;
             return;
         }
 
@@ -550,7 +592,7 @@ public partial class EditorWindow : Window
             if (_cropRect is Rect cr && (cr.Width < 2 || cr.Height < 2)) ClearCrop();
             return;
         }
-        if (_drawing != null || _moving)
+        if (_drawing != null || _moving || _endpointDrag != 0)
         {
             var p = ImagePoint(e);
             if (_drawing is StrokeAnnotation s) s.AddPoint(p);
@@ -572,16 +614,35 @@ public partial class EditorWindow : Window
                     () => { foreach (var (a, g) in applied) a.AddErasure(g); UpdateAdorner(); });
             }
         }
+        if (_endpointDrag != 0)
+        {
+            _endpointDrag = 0;
+            if (_selected is LineAnnotation l)
+            {
+                Point s0 = _endpointFromStart, e0 = _endpointFromEnd, s1 = l.Start, e1 = l.End;
+                if (s0 != s1 || e0 != e1)
+                    _undo.Push("reshape", () => { l.SetPoints(s0, e0); UpdateAdorner(); }, () => { l.SetPoints(s1, e1); UpdateAdorner(); });
+            }
+        }
+        TextAnnotation? editText = null;
         if (_moving && _selected != null)
         {
             var a = _selected;
             var from = _moveStartOffset;
             var to = a.Offset;
             _moving = false;
-            if ((to - from).LengthSquared > 0.01)
+            double scale = ZoomTransform.ScaleX > 0 ? ZoomTransform.ScaleX : 1;
+            if (_textClick == a && (to - from).Length * scale < 3)
+            {
+                // a click on a text (text tool) edits it
+                a.Offset = from;
+                editText = _textClick;
+            }
+            else if ((to - from).LengthSquared > 0.01)
                 _undo.Push("move", () => { a.Offset = from; UpdateAdorner(); }, () => { a.Offset = to; UpdateAdorner(); });
         }
         _moving = false;
+        _textClick = null;
         UpdateSpotlights();
 
         if (_drawing != null)
@@ -597,9 +658,46 @@ public partial class EditorWindow : Window
                 _ => false,
             };
             if (tooSmall) RemoveItem(a);
-            else PushAdd(a);
+            else
+            {
+                PushAdd(a);
+                // keep a new line / arrow selected so its ends can be dragged right away
+                if (a is LineAnnotation) Select(a);
+            }
         }
         if (Pad.IsMouseCaptured) Pad.ReleaseMouseCapture();
+        if (editText != null) BeginTextEdit(editText.Origin + editText.Offset, editText);
+    }
+
+    private Ellipse MakeHandle() => new()
+    {
+        Fill = Brushes.White,
+        Stroke = (Brush)FindResource("AccentBrush"),
+        Visibility = Visibility.Collapsed,
+    };
+
+    /// <summary>Which endpoint handle of the selected line / arrow is under <paramref name="p"/> (0 = none).</summary>
+    private int HandleAt(Point p)
+    {
+        if (_selected is not LineAnnotation l || !_items.Contains(l) || l.Element.Visibility != Visibility.Visible) return 0;
+        double scale = ZoomTransform.ScaleX > 0 ? ZoomTransform.ScaleX : 1;
+        double r = 9 / scale;
+        if ((l.End + l.Offset - p).Length <= r) return 2;
+        if ((l.Start + l.Offset - p).Length <= r) return 1;
+        return 0;
+    }
+
+    /// <summary>Cursor while hovering (no button down); null keeps the tool's cursor.</summary>
+    private Cursor? HoverCursor(Point p)
+    {
+        if (_tool is EditorTool.Select or EditorTool.Line or EditorTool.Arrow && HandleAt(p) > 0) return Cursors.Hand;
+        return _tool switch
+        {
+            EditorTool.Select => HitTest(p) != null ? Cursors.SizeAll : Cursors.Arrow,
+            EditorTool.Text => HitTest(p) is TextAnnotation ? Cursors.SizeAll : Cursors.IBeam,
+            EditorTool.Line or EditorTool.Arrow => Cursors.Cross,
+            _ => null,
+        };
     }
 
     private static Point SnapAngle(Point a, Point b)
@@ -867,13 +965,22 @@ public partial class EditorWindow : Window
     private void UpdateAdorner()
     {
         UpdateSpotlights();
+        _handleStart.Visibility = _handleEnd.Visibility = Visibility.Collapsed;
         if (_selected == null || !_items.Contains(_selected))
         {
             _selectionOutline.Visibility = Visibility.Collapsed;
             return;
         }
-        var b = _selected.Bounds;
         double scale = ZoomTransform.ScaleX > 0 ? ZoomTransform.ScaleX : 1;
+        if (_selected is LineAnnotation line)
+        {
+            // a line / arrow shows a handle on each end instead of a box
+            _selectionOutline.Visibility = Visibility.Collapsed;
+            PlaceHandle(_handleStart, line.Start + line.Offset, scale);
+            PlaceHandle(_handleEnd, line.End + line.Offset, scale);
+            return;
+        }
+        var b = _selected.Bounds;
         double pad = 4 / scale;
         b.Inflate(pad, pad);
         _selectionOutline.StrokeThickness = 1.5 / scale;
@@ -883,6 +990,16 @@ public partial class EditorWindow : Window
         _selectionOutline.Width = Math.Max(0, b.Width);
         _selectionOutline.Height = Math.Max(0, b.Height);
         _selectionOutline.Visibility = Visibility.Visible;
+    }
+
+    private static void PlaceHandle(Ellipse h, Point at, double scale)
+    {
+        double d = 11 / scale;
+        h.Width = h.Height = d;
+        h.StrokeThickness = 2 / scale;
+        Canvas.SetLeft(h, at.X - d / 2);
+        Canvas.SetTop(h, at.Y - d / 2);
+        h.Visibility = Visibility.Visible;
     }
 
     private void UpdateCommandStates()
@@ -1362,6 +1479,13 @@ public partial class EditorWindow : Window
                     foreach (var (a, g) in _eraseApplied) a.RemoveErasure(g);
                     _eraseApplied.Clear();
                     _erasing = false;
+                    if (Pad.IsMouseCaptured) Pad.ReleaseMouseCapture();
+                }
+                else if (_endpointDrag != 0 && _selected is LineAnnotation el)
+                {
+                    el.SetPoints(_endpointFromStart, _endpointFromEnd);
+                    _endpointDrag = 0;
+                    UpdateAdorner();
                     if (Pad.IsMouseCaptured) Pad.ReleaseMouseCapture();
                 }
                 else if (_drawing != null) { var a = _drawing; _drawing = null; RemoveItem(a); if (Pad.IsMouseCaptured) Pad.ReleaseMouseCapture(); }

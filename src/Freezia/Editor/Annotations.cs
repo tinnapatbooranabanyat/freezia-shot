@@ -296,6 +296,14 @@ public sealed class LineAnnotation : Annotation
         Rebuild();
     }
 
+    /// <summary>Move both endpoints (local coordinates, without the offset).</summary>
+    public void SetPoints(Point start, Point end)
+    {
+        Start = start;
+        End = end;
+        Rebuild();
+    }
+
     private void Rebuild()
     {
         double t = Style.Thickness;
