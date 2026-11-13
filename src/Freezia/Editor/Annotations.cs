@@ -22,6 +22,15 @@ public enum EditorTool
     Mosaic,
     Step,
     Eraser,
+    Blur,
+    Spotlight,
+    Crop,
+}
+
+public enum RedactMode
+{
+    Pixelate,
+    Blur,
 }
 
 /// <summary>Visual style of an annotation. Immutable so it can be stored in undo commands.</summary>
@@ -160,6 +169,12 @@ public abstract class Annotation
     public virtual bool UsesFont => false;
     protected virtual bool UsesTranslate => true;
     protected virtual void OnOffsetChanged() { }
+
+    /// <summary>
+    /// The image was cropped: move this object by <paramref name="shift"/> so it stays on the same pixels,
+    /// and use <paramref name="newImage"/> for anything that samples the screenshot (mosaic / blur).
+    /// </summary>
+    public virtual void Rebase(Vector shift, PixelImage newImage) => Offset += shift;
 
     protected void Init()
     {
@@ -514,17 +529,27 @@ public sealed class StepAnnotation : Annotation
 public sealed class MosaicAnnotation : Annotation
 {
     private readonly Image _image = new() { Stretch = Stretch.None };
-    private readonly PixelImage _source;
+    private PixelImage _source;
     private PxRect _baked = default;
+
+    public override void Rebase(Vector shift, PixelImage newImage)
+    {
+        _source = newImage;
+        _baked = default;
+        base.Rebase(shift, newImage); // Offset change regenerates from the new image
+    }
 
     public Rect Rect { get; private set; }
     public override FrameworkElement Element => _image;
     public override bool UsesStroke => false;
     protected override bool UsesTranslate => false;
 
-    public MosaicAnnotation(AnnotationStyle style, Rect rect, PixelImage source) : base(style)
+    public RedactMode Mode { get; }
+
+    public MosaicAnnotation(AnnotationStyle style, Rect rect, PixelImage source, RedactMode mode = RedactMode.Pixelate) : base(style)
     {
         _source = source;
+        Mode = mode;
         Rect = rect;
         RenderOptions.SetBitmapScalingMode(_image, BitmapScalingMode.NearestNeighbor);
         Init();
@@ -571,6 +596,12 @@ public sealed class MosaicAnnotation : Annotation
         if (pr == _baked && _image.Source != null) return;
         _baked = pr;
 
+        if (Mode == RedactMode.Blur)
+        {
+            SetBitmap(pr, BlurRegion(pr));
+            return;
+        }
+
         int bs = BlockSize;
         int w = pr.Width, h = pr.Height, stride = w * 4;
         var dst = new byte[stride * h];
@@ -608,13 +639,154 @@ public sealed class MosaicAnnotation : Annotation
                 }
             }
         }
-        var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Pbgra32, null, dst, stride);
+        SetBitmap(pr, dst);
+    }
+
+    private void SetBitmap(PxRect pr, byte[] pixels)
+    {
+        var bmp = BitmapSource.Create(pr.Width, pr.Height, 96, 96, PixelFormats.Pbgra32, null, pixels, pr.Width * 4);
         bmp.Freeze();
         _image.Source = bmp;
-        _image.Width = w;
-        _image.Height = h;
+        _image.Width = pr.Width;
+        _image.Height = pr.Height;
         Canvas.SetLeft(_image, pr.X);
         Canvas.SetTop(_image, pr.Y);
+    }
+
+    /// <summary>
+    /// Strong Gaussian-like blur (3 box-blur passes) of the region; pixels around the region are
+    /// sampled too so edges blend. The result replaces the original pixels in the export.
+    /// </summary>
+    private byte[] BlurRegion(PxRect pr)
+    {
+        int radius = (int)Math.Max(2, Math.Round(Style.Thickness * 1.5 + 2));
+        int pad = radius * 3;
+        var src = new PxRect(pr.X - pad, pr.Y - pad, pr.Width + 2 * pad, pr.Height + 2 * pad)
+            .Intersect(new PxRect(0, 0, _source.Width, _source.Height));
+        int w = src.Width, h = src.Height;
+        var a = new float[w * h * 3];
+        for (int y = 0; y < h; y++)
+        {
+            int si = (src.Y + y) * _source.Stride + src.X * 4;
+            for (int x = 0; x < w; x++, si += 4)
+            {
+                int di = (y * w + x) * 3;
+                a[di] = _source.Pixels[si];
+                a[di + 1] = _source.Pixels[si + 1];
+                a[di + 2] = _source.Pixels[si + 2];
+            }
+        }
+        var b = new float[a.Length];
+        for (int pass = 0; pass < 3; pass++)
+        {
+            BoxH(a, b, w, h, radius);
+            BoxV(b, a, w, h, radius);
+        }
+        var dst = new byte[pr.Width * pr.Height * 4];
+        int ox = pr.X - src.X, oy = pr.Y - src.Y;
+        for (int y = 0; y < pr.Height; y++)
+        {
+            for (int x = 0; x < pr.Width; x++)
+            {
+                int si = ((y + oy) * w + (x + ox)) * 3;
+                int di = (y * pr.Width + x) * 4;
+                dst[di] = (byte)Math.Clamp(a[si], 0, 255);
+                dst[di + 1] = (byte)Math.Clamp(a[si + 1], 0, 255);
+                dst[di + 2] = (byte)Math.Clamp(a[si + 2], 0, 255);
+                dst[di + 3] = 255;
+            }
+        }
+        return dst;
+    }
+
+    private static void BoxH(float[] src, float[] dst, int w, int h, int r)
+    {
+        float inv = 1f / (2 * r + 1);
+        for (int y = 0; y < h; y++)
+        {
+            int row = y * w;
+            for (int c = 0; c < 3; c++)
+            {
+                float sum = 0;
+                for (int k = -r; k <= r; k++) sum += src[(row + Math.Clamp(k, 0, w - 1)) * 3 + c];
+                for (int x = 0; x < w; x++)
+                {
+                    dst[(row + x) * 3 + c] = sum * inv;
+                    int add = Math.Min(x + r + 1, w - 1), sub = Math.Max(x - r, 0);
+                    sum += src[(row + add) * 3 + c] - src[(row + sub) * 3 + c];
+                }
+            }
+        }
+    }
+
+    private static void BoxV(float[] src, float[] dst, int w, int h, int r)
+    {
+        float inv = 1f / (2 * r + 1);
+        for (int x = 0; x < w; x++)
+        {
+            for (int c = 0; c < 3; c++)
+            {
+                float sum = 0;
+                for (int k = -r; k <= r; k++) sum += src[(Math.Clamp(k, 0, h - 1) * w + x) * 3 + c];
+                for (int y = 0; y < h; y++)
+                {
+                    dst[(y * w + x) * 3 + c] = sum * inv;
+                    int add = Math.Min(y + r + 1, h - 1), sub = Math.Max(y - r, 0);
+                    sum += src[(add * w + x) * 3 + c] - src[(sub * w + x) * 3 + c];
+                }
+            }
+        }
+    }
+
+    public override Rect LocalBounds => Rect;
+}
+
+// ---------------------------------------------------------------- spotlight
+
+/// <summary>
+/// An area that stays bright while the rest of the image is dimmed. All spotlights are combined by the
+/// editor into ONE dim layer (so two spotlights don't darken each other); this element only shows a
+/// faint outline so the area can be selected, moved and deleted.
+/// </summary>
+public sealed class SpotlightAnnotation : Annotation
+{
+    private readonly Path _path = new() { Fill = Brushes.Transparent, StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 4, 4 } };
+
+    public bool IsEllipse { get; }
+    public Rect Rect { get; private set; }
+    public override FrameworkElement Element => _path;
+    public override bool UsesStroke => false;
+
+    public SpotlightAnnotation(AnnotationStyle style, Rect rect, bool ellipse) : base(style)
+    {
+        IsEllipse = ellipse;
+        Rect = rect;
+        Init();
+    }
+
+    public void SetRect(Rect r)
+    {
+        Rect = r;
+        ApplyStyle();
+    }
+
+    /// <summary>The bright area in image coordinates (offset included).</summary>
+    public Geometry HoleGeometry
+    {
+        get
+        {
+            var r = Rect;
+            r.Offset(Offset);
+            double rad = Math.Min(Style.Thickness * 1.5, Math.Min(r.Width, r.Height) / 2);
+            return IsEllipse ? new EllipseGeometry(r) : new RectangleGeometry(r, rad, rad);
+        }
+    }
+
+    protected override void ApplyStyle()
+    {
+        double rad = Math.Min(Style.Thickness * 1.5, Math.Min(Rect.Width, Rect.Height) / 2);
+        _path.Data = IsEllipse ? new EllipseGeometry(Rect) : new RectangleGeometry(Rect, rad, rad);
+        _path.Stroke = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF));
     }
 
     public override Rect LocalBounds => Rect;

@@ -32,7 +32,7 @@ public partial class EditorWindow : Window
         Color.FromRgb(0xFF, 0xFF, 0xFF), // white
     };
 
-    private readonly PixelImage _image;
+    private PixelImage _image;
     private readonly CaptureController _controller;
     private readonly SettingsService _settings;
     private readonly UndoManager _undo = new();
@@ -48,6 +48,12 @@ public partial class EditorWindow : Window
     private EditorTool _tool = EditorTool.Brush;
     private Annotation? _selected;
     private readonly Rectangle _selectionOutline;
+
+    // crop
+    private readonly Path _cropShade;
+    private readonly Rectangle _cropFrame;
+    private Rect? _cropRect;
+    private bool _cropping;
 
     // eraser
     private readonly Ellipse _eraserCursor;
@@ -118,6 +124,10 @@ public partial class EditorWindow : Window
             Visibility = Visibility.Collapsed,
         };
         AdornerLayer.Children.Add(_eraserCursor);
+        _cropShade = new Path { Fill = new SolidColorBrush(Color.FromArgb(0x99, 0, 0, 0)), Visibility = Visibility.Collapsed };
+        _cropFrame = new Rectangle { Stroke = Brushes.White, StrokeDashArray = new DoubleCollection { 4, 3 }, Visibility = Visibility.Collapsed };
+        AdornerLayer.Children.Insert(0, _cropShade);
+        AdornerLayer.Children.Add(_cropFrame);
         Pad.MouseLeave += (_, _) => _eraserCursor.Visibility = Visibility.Collapsed;
 
         _toolButtons = new()
@@ -133,6 +143,9 @@ public partial class EditorWindow : Window
             [EditorTool.Mosaic] = ToolMosaic,
             [EditorTool.Step] = ToolStep,
             [EditorTool.Eraser] = ToolEraser,
+            [EditorTool.Blur] = ToolBlur,
+            [EditorTool.Spotlight] = ToolSpotlight,
+            [EditorTool.Crop] = ToolCrop,
         };
         foreach (var (tool, rb) in _toolButtons)
         {
@@ -212,6 +225,12 @@ public partial class EditorWindow : Window
         ToolMosaic.ToolTip = Strings.ToolMosaic;
         ToolStep.ToolTip = Strings.ToolStep;
         ToolEraser.ToolTip = Strings.ToolEraser;
+        ToolBlur.ToolTip = Strings.ToolBlur;
+        ToolSpotlight.ToolTip = Strings.ToolSpotlight;
+        ToolCrop.ToolTip = Strings.ToolCrop;
+        ResizeButton.ToolTip = Strings.ResizeTitle;
+        CropHint.Text = Strings.CropHint;
+        CropApplyButton.Content = Strings.CropApply;
         ClearAllButton.ToolTip = Strings.ClearAll;
         PinButton.ToolTip = Strings.ActionPin;
         OcrButton.ToolTip = Strings.ActionOcr;
@@ -308,6 +327,8 @@ public partial class EditorWindow : Window
             _ => Cursors.Cross,
         };
         if (tool != EditorTool.Eraser) _eraserCursor.Visibility = Visibility.Collapsed;
+        if (tool != EditorTool.Crop) ClearCrop();
+        CropHint.Visibility = CropApplyButton.Visibility = tool == EditorTool.Crop ? Visibility.Visible : Visibility.Collapsed;
         UpdateStyleUi();
     }
 
@@ -406,6 +427,18 @@ public partial class EditorWindow : Window
             case EditorTool.Mosaic:
                 StartDrawing(new MosaicAnnotation(CurrentStyle, new Rect(p, p), _image));
                 break;
+            case EditorTool.Blur:
+                StartDrawing(new MosaicAnnotation(CurrentStyle, new Rect(p, p), _image, RedactMode.Blur));
+                break;
+            case EditorTool.Spotlight:
+                StartDrawing(new SpotlightAnnotation(CurrentStyle, new Rect(p, p), ellipse: shift));
+                break;
+            case EditorTool.Crop:
+                _cropping = true;
+                _cropRect = new Rect(ClampToImage(p), ClampToImage(p));
+                UpdateCropOverlay();
+                Pad.CaptureMouse();
+                break;
             case EditorTool.Text:
             {
                 if (HitTest(p) is TextAnnotation existing)
@@ -461,6 +494,13 @@ public partial class EditorWindow : Window
             return;
         }
 
+        if (_cropping)
+        {
+            _cropRect = new Rect(ClampToImage(_dragStart), ClampToImage(p));
+            UpdateCropOverlay();
+            return;
+        }
+
         if (_moving && _selected != null)
         {
             _selected.Offset = _moveStartOffset + (p - _dragStart);
@@ -489,6 +529,10 @@ public partial class EditorWindow : Window
             case MosaicAnnotation m:
                 m.SetRect(DragRect(_dragStart, p, shift));
                 break;
+            case SpotlightAnnotation sp:
+                sp.SetRect(DragRect(_dragStart, p, false));
+                UpdateSpotlights();
+                break;
         }
     }
 
@@ -497,6 +541,13 @@ public partial class EditorWindow : Window
         if (_erasing)
         {
             FinishDrag();
+            return;
+        }
+        if (_cropping)
+        {
+            _cropping = false;
+            if (Pad.IsMouseCaptured) Pad.ReleaseMouseCapture();
+            if (_cropRect is Rect cr && (cr.Width < 2 || cr.Height < 2)) ClearCrop();
             return;
         }
         if (_drawing != null || _moving)
@@ -531,6 +582,7 @@ public partial class EditorWindow : Window
                 _undo.Push("move", () => { a.Offset = from; UpdateAdorner(); }, () => { a.Offset = to; UpdateAdorner(); });
         }
         _moving = false;
+        UpdateSpotlights();
 
         if (_drawing != null)
         {
@@ -541,6 +593,7 @@ public partial class EditorWindow : Window
                 LineAnnotation l => (l.End - l.Start).Length < 2,
                 ShapeAnnotation sh => sh.Rect.Width < 2 && sh.Rect.Height < 2,
                 MosaicAnnotation m => m.Rect.Width < 2 || m.Rect.Height < 2,
+                SpotlightAnnotation sp => sp.Rect.Width < 2 || sp.Rect.Height < 2,
                 _ => false,
             };
             if (tooSmall) RemoveItem(a);
@@ -588,6 +641,7 @@ public partial class EditorWindow : Window
         index = Math.Clamp(index, 0, _items.Count);
         _items.Insert(index, a);
         DrawCanvas.Children.Insert(index, a.Element);
+        if (a is SpotlightAnnotation) UpdateSpotlights();
     }
 
     private void RemoveItem(Annotation a)
@@ -595,6 +649,7 @@ public partial class EditorWindow : Window
         if (_selected == a) Select(null);
         _items.Remove(a);
         DrawCanvas.Children.Remove(a.Element);
+        if (a is SpotlightAnnotation) UpdateSpotlights();
     }
 
     private void PushAdd(Annotation a)
@@ -654,6 +709,105 @@ public partial class EditorWindow : Window
 
     private void OnClearAll(object sender, RoutedEventArgs e) => ClearAll();
 
+    // ================================================================ crop + resize
+
+    private Point ClampToImage(Point p) => new(Math.Clamp(Math.Round(p.X), 0, _image.Width), Math.Clamp(Math.Round(p.Y), 0, _image.Height));
+
+    private void UpdateCropOverlay()
+    {
+        if (_cropRect is not Rect r)
+        {
+            _cropShade.Visibility = _cropFrame.Visibility = Visibility.Collapsed;
+            return;
+        }
+        double scale = ZoomTransform.ScaleX > 0 ? ZoomTransform.ScaleX : 1;
+        var shade = new CombinedGeometry(GeometryCombineMode.Exclude, new RectangleGeometry(new Rect(0, 0, _image.Width, _image.Height)), new RectangleGeometry(r));
+        _cropShade.Data = shade;
+        _cropShade.Visibility = Visibility.Visible;
+        _cropFrame.StrokeThickness = 1.5 / scale;
+        Canvas.SetLeft(_cropFrame, r.X);
+        Canvas.SetTop(_cropFrame, r.Y);
+        _cropFrame.Width = r.Width;
+        _cropFrame.Height = r.Height;
+        _cropFrame.Visibility = Visibility.Visible;
+        CropHint.Text = $"{(int)r.Width} × {(int)r.Height}  •  {Strings.CropHint}";
+    }
+
+    private void ClearCrop()
+    {
+        _cropRect = null;
+        _cropping = false;
+        UpdateCropOverlay();
+        CropHint.Text = Strings.CropHint;
+    }
+
+    private void OnCropApply(object sender, RoutedEventArgs e) => ApplyCrop();
+
+    /// <summary>Crop the screenshot; drawings stay editable and keep their place on the image.</summary>
+    private void ApplyCrop()
+    {
+        if (_cropRect is not Rect r) return;
+        CommitText();
+        FlushPendingStyle();
+        var pr = new PxRect((int)r.X, (int)r.Y, (int)r.Width, (int)r.Height).Intersect(new PxRect(0, 0, _image.Width, _image.Height));
+        if (pr.Width < 2 || pr.Height < 2) return;
+        var oldImage = _image;
+        var newImage = oldImage.Crop(pr);
+        var shift = new Vector(-pr.X, -pr.Y);
+        ClearCrop();
+        _undo.Do("crop", () => ReplaceImage(oldImage, -shift), () => ReplaceImage(newImage, shift));
+    }
+
+    private void ReplaceImage(PixelImage img, Vector shift)
+    {
+        foreach (var a in _items) a.Rebase(shift, img);
+        _image = img;
+        BaseImage.Source = img.Source;
+        ExportRoot.Width = img.Width;
+        ExportRoot.Height = img.Height;
+        ImageInfo.Text = $"{img.Width} × {img.Height} px";
+        Title = $"{Strings.EditorTitle}  ({img.Width} × {img.Height})";
+        Select(null);
+        UpdateSpotlights();
+        Dispatcher.BeginInvoke(InitialZoom, DispatcherPriority.Loaded);
+    }
+
+    private void OnResize(object sender, RoutedEventArgs e)
+    {
+        CommitText();
+        FlushPendingStyle();
+        var dlg = new ResizeDialog(this, _image.Width, _image.Height);
+        if (dlg.ShowDialog() != true) return;
+        ResizeTo(dlg.ResultWidth, dlg.ResultHeight);
+    }
+
+    /// <summary>Scale the image. Drawings are merged into it first (one undo step restores everything).</summary>
+    private void ResizeTo(int w, int h)
+    {
+        if (w == _image.Width && h == _image.Height) return;
+        var flattened = RenderOutput();
+        var dv = new DrawingVisual();
+        RenderOptions.SetBitmapScalingMode(dv, BitmapScalingMode.HighQuality);
+        using (var dc = dv.RenderOpen()) dc.DrawImage(flattened, new Rect(0, 0, w, h));
+        var rtb = new RenderTargetBitmap(w, h, 96, 96, PixelFormats.Pbgra32);
+        rtb.Render(dv);
+        rtb.Freeze();
+        var newImage = PixelImage.FromBitmapSource(rtb);
+        var oldImage = _image;
+        var oldItems = _items.ToList();
+        _undo.Do("resize",
+            () =>
+            {
+                ReplaceImage(oldImage, new Vector());
+                for (int i = 0; i < oldItems.Count; i++) AddItem(oldItems[i], i);
+            },
+            () =>
+            {
+                foreach (var a in oldItems) RemoveItem(a);
+                ReplaceImage(newImage, new Vector());
+            });
+    }
+
     /// <summary>Remove every drawing in one undoable step.</summary>
     private void ClearAll()
     {
@@ -694,8 +848,25 @@ public partial class EditorWindow : Window
         UpdateCommandStates();
     }
 
+    /// <summary>One dim layer for all spotlights: the image minus the union of their bright areas.</summary>
+    private void UpdateSpotlights()
+    {
+        var spots = _items.OfType<SpotlightAnnotation>().Where(s => s.Element.Visibility == Visibility.Visible).ToList();
+        if (spots.Count == 0)
+        {
+            SpotDim.Data = null;
+            return;
+        }
+        var holes = new GeometryGroup { FillRule = FillRule.Nonzero };
+        foreach (var s in spots) holes.Children.Add(s.HoleGeometry);
+        var dim = new CombinedGeometry(GeometryCombineMode.Exclude, new RectangleGeometry(new Rect(0, 0, _image.Width, _image.Height)), holes);
+        dim.Freeze();
+        SpotDim.Data = dim;
+    }
+
     private void UpdateAdorner()
     {
+        UpdateSpotlights();
         if (_selected == null || !_items.Contains(_selected))
         {
             _selectionOutline.Visibility = Visibility.Collapsed;
@@ -846,7 +1017,10 @@ public partial class EditorWindow : Window
             }
             else
             {
-                SizeLabel.Text = _tool == EditorTool.Eraser && _selected == null ? Strings.EraserSize : Strings.Thickness;
+                SizeLabel.Text = _selected != null ? Strings.Thickness
+                    : _tool == EditorTool.Eraser ? Strings.EraserSize
+                    : _tool == EditorTool.Blur ? Strings.BlurStrength
+                    : Strings.Thickness;
                 SizeSlider.Minimum = 1;
                 SizeSlider.Maximum = 30;
                 SizeSlider.Value = _thickness;
@@ -1182,6 +1356,7 @@ public partial class EditorWindow : Window
                 break;
             case Key.Escape:
                 if (PickerPopup.IsOpen) Picker.Cancel();
+                else if (_cropRect != null) ClearCrop();
                 else if (_erasing)
                 {
                     foreach (var (a, g) in _eraseApplied) a.RemoveErasure(g);
@@ -1203,6 +1378,10 @@ public partial class EditorWindow : Window
             case Key.M: SetTool(EditorTool.Mosaic); break;
             case Key.N: SetTool(EditorTool.Step); break;
             case Key.E: SetTool(EditorTool.Eraser); break;
+            case Key.U: SetTool(EditorTool.Blur); break;
+            case Key.S: SetTool(EditorTool.Spotlight); break;
+            case Key.C: SetTool(EditorTool.Crop); break;
+            case Key.Enter when _tool == EditorTool.Crop && _cropRect != null: ApplyCrop(); break;
             case Key.Left or Key.Right or Key.Up or Key.Down when _selected != null:
                 NudgeSelected(key, shift ? 10 : 1);
                 break;
