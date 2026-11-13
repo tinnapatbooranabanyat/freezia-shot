@@ -2,13 +2,25 @@
 .SYNOPSIS
     Publishes Freezia (self-contained, single file, win-x64) and builds the installer.
 
+.DESCRIPTION
+    Local builds produce unsigned files. The GitHub Actions workflow (.github/workflows/release.yml)
+    calls this script in stages so the files can be code-signed (SignPath) in between:
+      -OcrNativeDir <dir>          embed these (signed) Tesseract/Leptonica DLLs instead of the NuGet ones
+      -SkipPublish                 build the installer from the existing artifacts\publish\Freezia.exe
+      -SignedUninstallerDir <dir>  sign the uninstaller externally (Inno Setup SignedUninstaller mode)
+      -PrepareUninstaller          only create the unsigned uninstaller (uninst-*.e32) in that dir, then stop
+
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\build.ps1
     powershell -ExecutionPolicy Bypass -File .\build.ps1 -SkipInstaller
 #>
 param(
     [string]$Configuration = 'Release',
-    [switch]$SkipInstaller
+    [switch]$SkipInstaller,
+    [switch]$SkipPublish,
+    [string]$OcrNativeDir,
+    [string]$SignedUninstallerDir,
+    [switch]$PrepareUninstaller
 )
 
 $ErrorActionPreference = 'Stop'
@@ -35,10 +47,19 @@ if (-not ($sdks -match '^10\.')) { throw '.NET 10 SDK not found. Install it from
 # ---- stop a running copy so files are not locked ----
 Get-Process -Name 'Freezia' -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$artifacts*" } | Stop-Process -Force
 
+$exe = Join-Path $publish 'Freezia.exe'
+if (-not $SkipPublish) {
 # ---- publish ----
 Step "Publishing ($Configuration, win-x64, self-contained single file)"
 if (Test-Path $publish) { Remove-Item $publish -Recurse -Force }
-& dotnet publish $project `
+$extraProps = @()
+if ($OcrNativeDir) {
+    $OcrNativeDir = (Resolve-Path $OcrNativeDir).Path
+    if (-not (Get-ChildItem $OcrNativeDir -Filter *.dll)) { throw "No DLLs in $OcrNativeDir" }
+    $extraProps += "-p:OcrNativeDir=$OcrNativeDir"
+    Write-Host "OCR natives from $OcrNativeDir"
+}
+& dotnet publish $project @extraProps `
     -c $Configuration `
     -r win-x64 `
     --self-contained true `
@@ -49,12 +70,13 @@ if (Test-Path $publish) { Remove-Item $publish -Recurse -Force }
     -o $publish
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
 
-$exe = Join-Path $publish 'Freezia.exe'
 if (-not (Test-Path $exe)) { throw "Publish output missing: $exe" }
 $extra = Get-ChildItem $publish -Recurse -File | Where-Object { $_.Name -ne 'Freezia.exe' }
 if ($extra) { throw "Single-file publish left extra files: $($extra.Name -join ', ')" }
 $sizeMb = [math]::Round((Get-Item $exe).Length / 1MB, 1)
 Write-Host "Published: $exe ($sizeMb MB)" -ForegroundColor Green
+}
+elseif (-not (Test-Path $exe)) { throw "-SkipPublish: $exe not found" }
 
 if ($SkipInstaller) { return }
 
@@ -97,7 +119,27 @@ Write-Host "Using $iscc"
 $stage = Join-Path $env:TEMP "freezia-setup-build"
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Force $stage | Out-Null
-& $iscc "/O$stage" "/DAppVersion=$version" "/DPublishDir=$publish" "/DRedistDir=$redistDir" $iss
+$isccArgs = @("/O$stage", "/DAppVersion=$version", "/DPublishDir=$publish", "/DRedistDir=$redistDir")
+if ($SignedUninstallerDir) {
+    New-Item -ItemType Directory -Force $SignedUninstallerDir | Out-Null
+    $SignedUninstallerDir = (Resolve-Path $SignedUninstallerDir).Path
+    $isccArgs += "/DSignedUninstallerDir=$SignedUninstallerDir"
+}
+if ($PrepareUninstaller) {
+    if (-not $SignedUninstallerDir) { throw '-PrepareUninstaller needs -SignedUninstallerDir' }
+    Get-ChildItem $SignedUninstallerDir -Filter 'uninst-*.e32' | Remove-Item -Force
+    # Inno Setup writes the unsigned uninstaller, then stops with "please attach your digital signature"
+    # (the expected error goes to stderr: do not let it stop this script)
+    $eap = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+    & $iscc @isccArgs $iss 2>&1 | ForEach-Object { "$_" } | Out-Host
+    $ErrorActionPreference = $eap
+    $u = Get-ChildItem $SignedUninstallerDir -Filter 'uninst-*.e32' | Select-Object -First 1
+    if (-not $u) { throw "Inno Setup did not create an uninstaller in $SignedUninstallerDir" }
+    Write-Host "`nUnsigned uninstaller ready to sign: $($u.FullName)" -ForegroundColor Green
+    $global:LASTEXITCODE = 0
+    return
+}
+& $iscc @isccArgs $iss
 if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed ($LASTEXITCODE)" }
 
 $setup = Join-Path $artifacts "Freezia-Setup-$version.exe"

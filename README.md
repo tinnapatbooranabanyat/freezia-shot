@@ -3,6 +3,13 @@
 โปรแกรมจับภาพหน้าจอสำหรับ Windows 10/11 (x64) แนวเดียวกับ Lightshot แต่หน้าตาทันสมัยกว่าและแก้ไขภาพได้มากกว่า
 เขียนด้วย C# + .NET 10 + WPF ทำงานในเครื่องเท่านั้น **ไม่มีการเชื่อมต่ออินเทอร์เน็ต ไม่มี cloud ไม่มี telemetry**
 
+> **English:** Freezia is a free, open-source (MIT) screenshot tool for Windows 10/11. Capture a region, window,
+> UI element, screen or all monitors, then annotate it in a built-in editor (arrows, shapes, text, steps, blur,
+> pixelate, spotlight, crop, resize). It also does Thai/English OCR, QR/barcode reading, pin-to-screen, capture
+> history and a screen color picker. Everything runs locally: no network connections, no telemetry.
+> Downloads: [Releases](https://github.com/tinnapatbooranabanyat/freezia-shot/releases) ·
+> [Code signing policy](#code-signing-policy)
+
 ## ฟีเจอร์
 
 - **ทำงานเบื้องหลังที่ถาดระบบ (system tray)**: เมนูแคปพื้นที่ / แคปจอนี้ / แคปทุกจอ / เปิดโฟลเดอร์ที่บันทึก / ตั้งค่า / ออก
@@ -79,6 +86,12 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 เลขเวอร์ชันอ่านจาก `<Version>` ใน `src/Freezia/Freezia.csproj`
 
 ---
+
+### สร้างบน GitHub Actions (สำหรับปล่อยเวอร์ชันจริง)
+
+workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) build ตัวติดตั้งบนเครื่องของ GitHub ทุกครั้งที่ push tag เช่น `v1.0.1` (ต้องตรงกับ `<Version>` ใน `Freezia.csproj`) แล้วสร้างหน้า Release ให้
+ถ้าตั้งค่า SignPath ไว้ (ตัวแปร `SIGNPATH_ORGANIZATION_ID` และ secret `SIGNPATH_API_TOKEN`) จะเซ็นดิจิทัลไฟล์ทั้งหมดก่อนแนบ เพื่อให้ Windows Smart App Control ยอมให้ติดตั้ง
+ตั้งค่าใน SignPath ตามไฟล์ใน [`.signpath/artifact-configurations/`](.signpath/artifact-configurations)
 
 ## วิธีติดตั้ง
 
@@ -285,6 +298,28 @@ powershell -ExecutionPolicy Bypass -File .\build.ps1
 - [ ] ออกจากเมนูถาดแล้วไม่มีไอคอนค้างในถาด
 
 ---
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- **What is signed:** only files built from this repository by the GitHub Actions workflow
+  [`.github/workflows/release.yml`](.github/workflows/release.yml): `Freezia.exe`, the installer
+  `Freezia-Setup-<version>.exe` and its uninstaller. The open-source Tesseract and Leptonica OCR DLLs
+  (Apache-2.0 / BSD-2-Clause, from the [TesseractOCR](https://www.nuget.org/packages/TesseractOCR) NuGet package,
+  see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)) ship unsigned upstream and are signed in the same workflow
+  so that Windows Smart App Control can load them. The bundled Microsoft Visual C++
+  Redistributable is already signed by Microsoft and is not re-signed.
+- **Team roles:**
+  - Committers and reviewers: [Tinnapat Booranabanyat](https://github.com/tinnapatbooranabanyat)
+  - Approvers: [Tinnapat Booranabanyat](https://github.com/tinnapatbooranabanyat)
+- **Privacy policy:** This program will not transfer any information to other networked systems unless
+  specifically requested by the user or the person installing or operating it. Freezia itself makes no network
+  connections; screenshots, settings and history stay on the local computer.
+
+## ไลเซนส์
+
+Freezia ใช้สัญญาอนุญาต [MIT](LICENSE) (ใช้ แก้ไข และแจกต่อได้ฟรี รวมถึงใช้ในเชิงพาณิชย์ โดยต้องคงข้อความลิขสิทธิ์ไว้)
 
 ## ไลเซนส์ของส่วนประกอบ
 

@@ -55,6 +55,12 @@ WizardStyle=modern dynamic
 ; does not keep showing the old one from the icon cache (taskbar, Start, shortcuts).
 ChangesAssociations=yes
 ShowLanguageDialog=auto
+#ifdef SignedUninstallerDir
+; CI (release.yml): the uninstaller is signed outside Inno Setup (SignPath). The first compile writes an
+; unsigned uninst-*.e32 here and stops; once that file is signed, later compiles embed its signature.
+SignedUninstaller=yes
+SignedUninstallerDir={#SignedUninstallerDir}
+#endif
 
 [Languages]
 Name: "thai"; MessagesFile: "compiler:Languages\Thai.isl"

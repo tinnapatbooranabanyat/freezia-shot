@@ -32,6 +32,11 @@
     <DebugType>none</DebugType>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <!-- Tesseract + Leptonica native DLLs embedded into the exe (extracted on first OCR) -->
+    <OcrNativeDir Condition="'$(OcrNativeDir)' == ''">$(PkgTesseractOCR)\x64</OcrNativeDir>
+  </PropertyGroup>
+
   <ItemGroup>
     <Resource Include="Assets\app.ico" />
     <!-- IBM Plex Sans Thai (SIL Open Font License 1.1, see Assets/Fonts/OFL.txt), embedded: nothing to install -->
@@ -48,7 +53,8 @@
 
   <ItemGroup>
     <!-- extracted to %LocalAppData%\Freezia\ocr\<version>\ on first OCR (see Core/OcrService.cs) -->
-    <EmbeddedResource Include="$(PkgTesseractOCR)\x64\*.dll" LogicalName="ocr/x64/%(Filename)%(Extension)" Visible="false" />
+    <!-- OcrNativeDir: CI passes the folder with the code-signed copies (see .github/workflows/release.yml) -->
+    <EmbeddedResource Include="$(OcrNativeDir)\*.dll" LogicalName="ocr/x64/%(Filename)%(Extension)" Visible="false" />
     <EmbeddedResource Include="Assets\Ocr\tessdata\*.traineddata" LogicalName="ocr/tessdata/%(Filename)%(Extension)" />
   </ItemGroup>
 
