@@ -8,6 +8,14 @@ public enum ImageFormatKind
     Jpg,
 }
 
+public enum CaptureMethod
+{
+    /// <summary>Windows.Graphics.Capture (games, HDR) with automatic GDI fallback.</summary>
+    Auto,
+    /// <summary>Classic GDI screen copy only.</summary>
+    Gdi,
+}
+
 public enum AfterCaptureAction
 {
     OpenEditor,
@@ -26,6 +34,8 @@ public sealed class AppSettings
 
     /// <summary>Keep recent captures in %LocalAppData%\Freezia\history.</summary>
     public bool HistoryEnabled { get; set; } = true;
+
+    public CaptureMethod CaptureMethod { get; set; } = CaptureMethod.Auto;
     public int HistoryLimit { get; set; } = 50;
 
     /// <summary>Custom save folder; null/empty = the user's Downloads known folder.</summary>

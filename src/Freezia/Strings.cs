@@ -70,6 +70,11 @@ public static class Strings
     public static string SettingsHistory => T("เก็บประวัติการแคป", "Keep a capture history");
     public static string SettingsHistoryLimit => T("จำนวนภาพที่เก็บ", "Images to keep");
     public static string SettingsHistoryHint => T("เก็บไว้ในเครื่องที่ %LocalAppData%\\Freezia\\history เท่านั้น • ปิดแล้วจะลบประวัติทั้งหมด", "Stored only on this PC in %LocalAppData%\\Freezia\\history • turning it off deletes the history");
+    public static string SettingsCaptureMethod => T("วิธีจับภาพ", "Capture method");
+    public static string CaptureMethodAuto => T("อัตโนมัติ (แนะนำ)", "Automatic (recommended)");
+    public static string CaptureMethodGdi => T("แบบเดิม (GDI)", "Classic (GDI)");
+    public static string CaptureMethodHint => T("อัตโนมัติ = ใช้ Windows.Graphics.Capture ซึ่งแคปเกมเต็มจอและจอ HDR ได้ถูกต้อง และกลับไปใช้แบบเดิมเองถ้าใช้ไม่ได้ • แบบเดิมเร็วกว่าเล็กน้อยแต่เกม/HDR อาจเป็นสีดำหรือซีด",
+                                                "Automatic = Windows.Graphics.Capture, which handles full-screen games and HDR monitors, falling back to classic when unavailable • Classic is slightly faster but games/HDR may come out black or washed out");
     public static string ActionQr => T("อ่าน QR / บาร์โค้ด", "Read QR / barcode");
     public static string ActionEdit => T("แก้ไข", "Edit");
     public static string ActionCopy => T("คัดลอก", "Copy");

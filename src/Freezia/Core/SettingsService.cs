@@ -85,6 +85,7 @@ public sealed class SettingsService
         s.HotkeyAllScreens ??= Hotkey.None;
         s.HotkeyColorPicker ??= Hotkey.None;
         s.HistoryLimit = Math.Clamp(s.HistoryLimit, 0, 500);
+        if (!Enum.IsDefined(s.CaptureMethod)) s.CaptureMethod = CaptureMethod.Auto;
         s.Editor ??= new EditorSettings();
         s.Editor.RecentColors ??= new();
         s.Editor.SavedColors ??= new();

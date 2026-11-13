@@ -62,6 +62,8 @@ public partial class SettingsWindow : Window
         BoxScreen.Hotkey = _edit.HotkeyScreen;
         BoxAll.Hotkey = _edit.HotkeyAllScreens;
         BoxColor.Hotkey = _edit.HotkeyColorPicker;
+        MethodAuto.IsChecked = _edit.CaptureMethod == CaptureMethod.Auto;
+        MethodGdi.IsChecked = _edit.CaptureMethod == CaptureMethod.Gdi;
         HistoryToggle.IsChecked = _edit.HistoryEnabled;
         HistoryLimitSlider.Value = Math.Clamp(_edit.HistoryLimit, 10, 200);
         HistoryLimitValue.Text = ((int)HistoryLimitSlider.Value).ToString();
@@ -135,6 +137,10 @@ public partial class SettingsWindow : Window
         LblAll.Text = Strings.SettingsHotkeyAll;
         LblColor.Text = Strings.SettingsHotkeyColor;
         HistoryToggle.Content = Strings.SettingsHistory;
+        LblCaptureMethod.Text = Strings.SettingsCaptureMethod;
+        MethodAuto.Content = Strings.CaptureMethodAuto;
+        MethodGdi.Content = Strings.CaptureMethodGdi;
+        CaptureMethodHint.Text = Strings.CaptureMethodHint;
         LblHistoryLimit.Text = Strings.SettingsHistoryLimit;
         HistoryHint.Text = Strings.SettingsHistoryHint;
         HotkeyHelp.Text = Strings.SettingsHotkeyHelp;
@@ -510,6 +516,7 @@ public partial class SettingsWindow : Window
         _edit.HotkeyAllScreens = BoxAll.Hotkey;
         _edit.HotkeyColorPicker = BoxColor.Hotkey;
         _edit.HistoryEnabled = HistoryToggle.IsChecked == true;
+        _edit.CaptureMethod = MethodGdi.IsChecked == true ? CaptureMethod.Gdi : CaptureMethod.Auto;
         _edit.HistoryLimit = (int)HistoryLimitSlider.Value;
         if (!_edit.HistoryEnabled) HistoryService.Clear();
         else HistoryService.Prune(_edit.HistoryLimit);

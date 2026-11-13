@@ -58,6 +58,9 @@ public partial class App : Application
         Loc.Set(Settings.Current.Language);
         ThemeManager.Apply(Settings.Current.ThemeId, ParseAccent(Settings.Current.CustomBackground));
         ThemeManager.SetAccent(ParseAccent(Settings.Current.AccentColor));
+        ScreenCapture.PreferWgc = Settings.Current.CaptureMethod == CaptureMethod.Auto;
+        if (ScreenCapture.PreferWgc && OperatingSystem.IsWindowsVersionAtLeast(10, 0, 18362))
+            System.Threading.Tasks.Task.Run(WgcCapture.Warmup);
 
         _instance.Listen(
             // launching Freezia again while it runs opens the settings window
@@ -91,6 +94,7 @@ public partial class App : Application
             Loc.Set(Settings.Current.Language);
             ThemeManager.Apply(Settings.Current.ThemeId, ParseAccent(Settings.Current.CustomBackground));
             ThemeManager.SetAccent(ParseAccent(Settings.Current.AccentColor));
+            ScreenCapture.PreferWgc = Settings.Current.CaptureMethod == CaptureMethod.Auto;
         };
     }
 

@@ -196,6 +196,12 @@
                     <StackPanel>
                         <TextBlock x:Name="GeneralHeader" Style="{StaticResource SectionHeader}" />
                         <CheckBox x:Name="StartupToggle" Style="{StaticResource ToggleSwitch}" />
+                        <TextBlock x:Name="LblCaptureMethod" Style="{StaticResource RowLabel}" Margin="0,16,0,8" />
+                        <StackPanel Orientation="Horizontal">
+                            <RadioButton x:Name="MethodAuto" Style="{StaticResource PillRadio}" GroupName="method" />
+                            <RadioButton x:Name="MethodGdi" Style="{StaticResource PillRadio}" GroupName="method" />
+                        </StackPanel>
+                        <TextBlock x:Name="CaptureMethodHint" Style="{StaticResource DimText}" Margin="0,6,0,0" />
                         <CheckBox x:Name="HistoryToggle" Style="{StaticResource ToggleSwitch}" Margin="0,14,0,0" />
                         <DockPanel x:Name="HistoryPanel" Margin="50,10,0,0">
                             <TextBlock x:Name="LblHistoryLimit" Style="{StaticResource RowLabel}" Width="150" />
