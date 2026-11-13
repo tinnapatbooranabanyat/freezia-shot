@@ -69,6 +69,7 @@ public sealed class CaptureController
         {
             var mon = Monitors.FromCursor();
             var img = ScreenCapture.CaptureRect(mon.Bounds);
+            Remember(img.Source);
             HandleFullCapture(img);
         }
         catch (Exception ex)
@@ -84,6 +85,7 @@ public sealed class CaptureController
         try
         {
             var img = ScreenCapture.CaptureVirtualScreen();
+            Remember(img.Source);
             HandleFullCapture(img);
         }
         catch (Exception ex)
@@ -97,9 +99,16 @@ public sealed class CaptureController
 
     private void OnSessionFinished(CaptureOutcome outcome, PixelImage? image)
     {
+        var session = _session;
         _hotkeys.SetCaptureHandler(null);
         _session = null;
+        if (outcome == CaptureOutcome.ColorPicked && session != null)
+        {
+            CopyColor(session.PickedColor, session.PickedAsRgb);
+            return;
+        }
         if (image == null) return;
+        Remember(image.Source);
 
         switch (outcome)
         {
@@ -215,6 +224,61 @@ public sealed class CaptureController
             ToastWindow.ShowToast(Strings.ToastSaveFailed, ex.Message, error: true);
             return null;
         }
+    }
+
+    // ---------------- history + screen color picker ----------------
+
+    /// <summary>Add to the capture history (no-op when history is turned off).</summary>
+    public void Remember(BitmapSource image) => HistoryService.Add(image, _settings.Current);
+
+    /// <summary>Freeze the screen and let the user click any pixel to copy its color.</summary>
+    public void PickColor()
+    {
+        if (IsBusy) return;
+        PixelImage shot;
+        try
+        {
+            shot = ScreenCapture.CaptureVirtualScreen();
+        }
+        catch (Exception ex)
+        {
+            Logger.Error("Capture failed", ex);
+            ToastWindow.ShowToast(Strings.ToastCaptureFailed, ex.Message, error: true);
+            return;
+        }
+        var session = new CaptureSession(shot, Monitors.GetAll()) { PickColorMode = true };
+        _session = session;
+        session.Finished += OnSessionFinished;
+        _hotkeys.SetCaptureHandler(session.HandleKey);
+        session.Show();
+    }
+
+    private void CopyColor(System.Windows.Media.Color c, bool asRgb)
+    {
+        string text = asRgb ? $"rgb({c.R}, {c.G}, {c.B})" : $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+        for (int i = 0; i < 10; i++)
+        {
+            try
+            {
+                System.Windows.Clipboard.SetText(text);
+                break;
+            }
+            catch (System.Runtime.InteropServices.COMException)
+            {
+                System.Threading.Thread.Sleep(50);
+            }
+        }
+        // remember it in the editor's recent colors
+        var recent = _settings.Current.Editor.RecentColors;
+        string hex8 = $"#FF{c.R:X2}{c.G:X2}{c.B:X2}";
+        recent.RemoveAll(x => string.Equals(x, hex8, StringComparison.OrdinalIgnoreCase));
+        recent.Insert(0, hex8);
+        if (recent.Count > 8) recent.RemoveRange(8, recent.Count - 8);
+        _settings.Save();
+
+        var swatch = BitmapSource.Create(1, 1, 96, 96, System.Windows.Media.PixelFormats.Bgr32, null, new byte[] { c.B, c.G, c.R, 0 }, 4);
+        swatch.Freeze();
+        ToastWindow.ShowToast(Strings.ColorCopied, text, thumb: swatch);
     }
 
     // ---------------- pin / OCR / QR ----------------

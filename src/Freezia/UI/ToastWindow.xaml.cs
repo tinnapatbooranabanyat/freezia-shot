@@ -34,6 +34,12 @@ public partial class ToastWindow : Window
         {
             Thumb.Source = thumb;
             Thumb.Visibility = Visibility.Visible;
+            if (thumb.PixelWidth <= 2) // a color swatch
+            {
+                Thumb.Width = Thumb.Height = 34;
+                Thumb.Stretch = Stretch.Fill;
+                RenderOptions.SetBitmapScalingMode(Thumb, BitmapScalingMode.NearestNeighbor);
+            }
         }
         if (error)
         {

@@ -72,6 +72,8 @@ public partial class App : Application
         _tray.OpenFolder += OpenSaveFolder;
         _tray.OpenSettings += OpenSettings;
         _tray.ExitRequested += ExitApp;
+        _tray.OpenHistory += OpenHistory;
+        _tray.PickColor += () => _capture?.PickColor();
 
         _hotkeys = new HotkeyManager(Dispatcher);
         _hotkeys.SetBindings(Settings.Current);
@@ -127,6 +129,7 @@ public partial class App : Application
             case HotkeyAction.CaptureRegion: CaptureRegion(); break;
             case HotkeyAction.CaptureScreen: CaptureScreen(); break;
             case HotkeyAction.CaptureAllScreens: CaptureAllScreens(); break;
+            case HotkeyAction.PickColor: _capture?.PickColor(); break;
         }
     }
 
@@ -165,6 +168,24 @@ public partial class App : Application
         {
             Logger.Error("Open folder failed", ex);
         }
+    }
+
+    private HistoryWindow? _historyWindow;
+
+    public void OpenHistory()
+    {
+        if (_capture == null) return;
+        if (_historyWindow != null)
+        {
+            if (_historyWindow.WindowState == WindowState.Minimized) _historyWindow.WindowState = WindowState.Normal;
+            _historyWindow.Activate();
+            return;
+        }
+        _historyWindow = new HistoryWindow(_capture);
+        _historyWindow.Closed += (_, _) => _historyWindow = null;
+        _historyWindow.Show();
+        Freezia.Native.NativeMethods.ForceForeground(new System.Windows.Interop.WindowInteropHelper(_historyWindow).Handle);
+        _historyWindow.Activate();
     }
 
     private SettingsWindow? _settingsWindow;

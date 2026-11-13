@@ -20,6 +20,8 @@ public sealed class TrayIcon : IDisposable
     public event Action? CaptureScreen;
     public event Action? CaptureAll;
     public event Action? OpenFolder;
+    public event Action? OpenHistory;
+    public event Action? PickColor;
     public event Action? OpenSettings;
     public event Action? ExitRequested;
 
@@ -58,7 +60,9 @@ public sealed class TrayIcon : IDisposable
         m.AddItem(TrayMenu.IconRegion, Strings.TrayCaptureRegion, Key(_settings.HotkeyRegion), () => Delayed(() => CaptureRegion?.Invoke(), 200), bold: true);
         m.AddItem(TrayMenu.IconScreen, Strings.TrayCaptureScreen, Key(_settings.HotkeyScreen), () => Delayed(() => CaptureScreen?.Invoke(), 200));
         m.AddItem(TrayMenu.IconAll, Strings.TrayCaptureAll, Key(_settings.HotkeyAllScreens), () => Delayed(() => CaptureAll?.Invoke(), 200));
+        m.AddGlyphItem("", Strings.TrayPickColor, () => Delayed(() => PickColor?.Invoke(), 200));
         m.AddSeparator();
+        m.AddGlyphItem("", Strings.TrayHistory, () => OpenHistory?.Invoke());
         m.AddGlyphItem("", Strings.TrayOpenFolder, () => OpenFolder?.Invoke());
         m.AddGlyphItem("", Strings.TraySettings, () => OpenSettings?.Invoke());
         m.AddSeparator();

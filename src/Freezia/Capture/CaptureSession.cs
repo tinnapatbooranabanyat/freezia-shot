@@ -26,6 +26,8 @@ public enum CaptureOutcome
     Ocr,
     /// <summary>Read QR codes / barcodes in the selection (Q).</summary>
     Qr,
+    /// <summary>Screen color picker: a click picked <see cref="CaptureSession.PickedColor"/>.</summary>
+    ColorPicked,
 }
 
 public enum DragMode
@@ -61,13 +63,18 @@ public sealed class CaptureSession
     public bool HasSelection => !Selection.IsEmpty;
     public DragMode Mode { get; private set; }
     public (int X, int Y) Cursor { get; private set; }
-    public bool ShowLoupe => Mode is DragMode.Creating or DragMode.Resizing || (!HasSelection && Mode == DragMode.None);
+    public bool ShowLoupe => PickColorMode || Mode is DragMode.Creating or DragMode.Resizing || (!HasSelection && Mode == DragMode.None);
 
     public MonitorInfo? LabelMonitor { get; private set; }
     public MonitorInfo? ActionMonitor { get; private set; }
 
     /// <summary>Raised once. The image is null when cancelled.</summary>
     public event Action<CaptureOutcome, PixelImage?>? Finished;
+
+    /// <summary>Screen color picker: no selection, the loupe follows the mouse, a click picks a color.</summary>
+    public bool PickColorMode { get; init; }
+    public System.Windows.Media.Color PickedColor { get; private set; }
+    public bool PickedAsRgb { get; private set; }
 
     public CaptureSession(PixelImage shot, List<MonitorInfo> monitors, List<WindowRegion>? windows = null)
     {
@@ -103,6 +110,7 @@ public sealed class CaptureSession
     /// <summary>Plain hover = whole window; Ctrl held = the UI element under the mouse.</summary>
     private void UpdateHover(int x, int y)
     {
+        if (PickColorMode) return;
         bool ctrl = CtrlDown;
         _lastCtrl = ctrl;
         var win = WindowFinder.At(_windows, x, y);
@@ -254,6 +262,14 @@ public sealed class CaptureSession
         if (_finished) return;
         (x, y) = Clamp(x, y);
         Cursor = (x, y);
+
+        if (PickColorMode)
+        {
+            PickedColor = Shot.GetPixel(x - Shot.OriginX, y - Shot.OriginY);
+            PickedAsRgb = shift;
+            Finish(CaptureOutcome.ColorPicked);
+            return;
+        }
 
         if (clickCount >= 2 && HasSelection && Selection.Contains(x, y))
         {
@@ -416,6 +432,11 @@ public sealed class CaptureSession
     public void HandleKey(int vk, HotkeyModifiers mods)
     {
         if (_finished) return;
+        if (PickColorMode)
+        {
+            if (vk == 0x1B) Finish(CaptureOutcome.Cancel);
+            return;
+        }
         bool ctrl = mods.HasFlag(HotkeyModifiers.Ctrl), shift = mods.HasFlag(HotkeyModifiers.Shift);
         switch (vk)
         {
@@ -504,6 +525,7 @@ public sealed class CaptureSession
             switch (outcome)
             {
                 case CaptureOutcome.Cancel:
+                case CaptureOutcome.ColorPicked:
                     break;
                 case CaptureOutcome.FullScreen:
                     result = Shot.CropScreen((_fullScreenMonitor ?? Monitors.FromCursor()).Bounds);

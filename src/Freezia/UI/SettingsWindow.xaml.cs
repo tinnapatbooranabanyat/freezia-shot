@@ -61,13 +61,20 @@ public partial class SettingsWindow : Window
         BoxRegion.Hotkey = _edit.HotkeyRegion;
         BoxScreen.Hotkey = _edit.HotkeyScreen;
         BoxAll.Hotkey = _edit.HotkeyAllScreens;
-        foreach (var box in new[] { BoxRegion, BoxScreen, BoxAll })
+        BoxColor.Hotkey = _edit.HotkeyColorPicker;
+        HistoryToggle.IsChecked = _edit.HistoryEnabled;
+        HistoryLimitSlider.Value = Math.Clamp(_edit.HistoryLimit, 10, 200);
+        HistoryLimitValue.Text = ((int)HistoryLimitSlider.Value).ToString();
+        HistoryLimitSlider.ValueChanged += (_, e) => HistoryLimitValue.Text = ((int)e.NewValue).ToString();
+        HistoryToggle.Click += (_, _) => HistoryPanel.IsEnabled = HistoryToggle.IsChecked == true;
+        HistoryPanel.IsEnabled = _edit.HistoryEnabled;
+        foreach (var box in new[] { BoxRegion, BoxScreen, BoxAll, BoxColor })
         {
             box.Validate = ValidateHotkey;
             box.Message += (_, msg) => ShowHotkeyError(msg);
             box.RecordingStarted += b =>
             {
-                foreach (var other in new[] { BoxRegion, BoxScreen, BoxAll })
+                foreach (var other in new[] { BoxRegion, BoxScreen, BoxAll, BoxColor })
                     if (other != b) other.StopRecording();
                 ShowHotkeyError(null);
             };
@@ -126,6 +133,10 @@ public partial class SettingsWindow : Window
         LblRegion.Text = Strings.SettingsHotkeyRegion;
         LblScreen.Text = Strings.SettingsHotkeyScreen;
         LblAll.Text = Strings.SettingsHotkeyAll;
+        LblColor.Text = Strings.SettingsHotkeyColor;
+        HistoryToggle.Content = Strings.SettingsHistory;
+        LblHistoryLimit.Text = Strings.SettingsHistoryLimit;
+        HistoryHint.Text = Strings.SettingsHistoryHint;
         HotkeyHelp.Text = Strings.SettingsHotkeyHelp;
         SnippingNote.Text = Strings.SettingsSnippingNote;
         SaveHeader.Text = Strings.SettingsSave;
@@ -154,6 +165,7 @@ public partial class SettingsWindow : Window
         BoxRegion.Label = Strings.SettingsHotkeyRegion;
         BoxScreen.Label = Strings.SettingsHotkeyScreen;
         BoxAll.Label = Strings.SettingsHotkeyAll;
+        BoxColor.Label = Strings.SettingsHotkeyColor;
         if (FolderHint != null) UpdateFolderUi();
     }
 
@@ -403,6 +415,7 @@ public partial class SettingsWindow : Window
         BoxRegion.StopRecording();
         BoxScreen.StopRecording();
         BoxAll.StopRecording();
+        BoxColor.StopRecording();
     }
 
     // ---------------- hotkeys ----------------
@@ -412,7 +425,7 @@ public partial class SettingsWindow : Window
         if (candidate.IsEmpty) return null;
         if (candidate.Modifiers == HotkeyModifiers.None && IsTypingKey(candidate.Key))
             return Strings.HotkeyNeedsModifier;
-        foreach (var other in new[] { BoxRegion, BoxScreen, BoxAll })
+        foreach (var other in new[] { BoxRegion, BoxScreen, BoxAll, BoxColor })
         {
             if (other != box && other.Hotkey == candidate)
                 return string.Format(Strings.HotkeyDuplicate, other.Label);
@@ -483,7 +496,7 @@ public partial class SettingsWindow : Window
         StopAllRecording();
 
         // final duplicate check (defensive: the boxes already validate while recording)
-        var boxes = new[] { BoxRegion, BoxScreen, BoxAll };
+        var boxes = new[] { BoxRegion, BoxScreen, BoxAll, BoxColor };
         for (int i = 0; i < boxes.Length; i++)
             for (int j = i + 1; j < boxes.Length; j++)
                 if (!boxes[i].Hotkey.IsEmpty && boxes[i].Hotkey == boxes[j].Hotkey)
@@ -495,6 +508,11 @@ public partial class SettingsWindow : Window
         _edit.HotkeyRegion = BoxRegion.Hotkey;
         _edit.HotkeyScreen = BoxScreen.Hotkey;
         _edit.HotkeyAllScreens = BoxAll.Hotkey;
+        _edit.HotkeyColorPicker = BoxColor.Hotkey;
+        _edit.HistoryEnabled = HistoryToggle.IsChecked == true;
+        _edit.HistoryLimit = (int)HistoryLimitSlider.Value;
+        if (!_edit.HistoryEnabled) HistoryService.Clear();
+        else HistoryService.Prune(_edit.HistoryLimit);
         _edit.SaveFolder = _folder;
         _edit.Format = FmtJpg.IsChecked == true ? ImageFormatKind.Jpg : ImageFormatKind.Png;
         _edit.JpegQuality = (int)QualitySlider.Value;

@@ -83,6 +83,8 @@ public sealed class SettingsService
         s.HotkeyRegion ??= Hotkey.None;
         s.HotkeyScreen ??= Hotkey.None;
         s.HotkeyAllScreens ??= Hotkey.None;
+        s.HotkeyColorPicker ??= Hotkey.None;
+        s.HistoryLimit = Math.Clamp(s.HistoryLimit, 0, 500);
         s.Editor ??= new EditorSettings();
         s.Editor.RecentColors ??= new();
         s.Editor.SavedColors ??= new();

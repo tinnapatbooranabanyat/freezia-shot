@@ -21,6 +21,12 @@ public sealed class AppSettings
     public Hotkey HotkeyRegion { get; set; } = new(HotkeyModifiers.None, Hotkey.VK_SNAPSHOT);
     public Hotkey HotkeyScreen { get; set; } = new(HotkeyModifiers.Ctrl, Hotkey.VK_SNAPSHOT);
     public Hotkey HotkeyAllScreens { get; set; } = new(HotkeyModifiers.Ctrl | HotkeyModifiers.Shift, Hotkey.VK_SNAPSHOT);
+    /// <summary>Screen color picker (not set by default).</summary>
+    public Hotkey HotkeyColorPicker { get; set; } = Hotkey.None;
+
+    /// <summary>Keep recent captures in %LocalAppData%\Freezia\history.</summary>
+    public bool HistoryEnabled { get; set; } = true;
+    public int HistoryLimit { get; set; } = 50;
 
     /// <summary>Custom save folder; null/empty = the user's Downloads known folder.</summary>
     public string? SaveFolder { get; set; }

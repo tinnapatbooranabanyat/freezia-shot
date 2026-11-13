@@ -12,6 +12,7 @@ public enum HotkeyAction
     CaptureRegion,
     CaptureScreen,
     CaptureAllScreens,
+    PickColor,
 }
 
 /// <summary>
@@ -75,6 +76,7 @@ public sealed class HotkeyManager : IDisposable
         Add(s.HotkeyRegion, HotkeyAction.CaptureRegion);
         Add(s.HotkeyScreen, HotkeyAction.CaptureScreen);
         Add(s.HotkeyAllScreens, HotkeyAction.CaptureAllScreens);
+        Add(s.HotkeyColorPicker, HotkeyAction.PickColor);
         _bindings = map;
     }
 

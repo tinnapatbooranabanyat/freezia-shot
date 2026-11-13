@@ -1547,16 +1547,22 @@ public partial class EditorWindow : Window
 
     private void Copy()
     {
-        if (_controller.Copy(RenderOutput())) _dirty = false;
+        var img = RenderOutput();
+        _controller.Remember(img);
+        if (_controller.Copy(img)) _dirty = false;
     }
 
     private void Save()
     {
-        if (_controller.Save(RenderOutput()) != null) _dirty = false;
+        var img = RenderOutput();
+        _controller.Remember(img);
+        if (_controller.Save(img) != null) _dirty = false;
     }
 
     private void SaveAs()
     {
-        if (_controller.SaveAs(RenderOutput(), this) != null) _dirty = false;
+        var img = RenderOutput();
+        _controller.Remember(img);
+        if (_controller.SaveAs(img, this) != null) _dirty = false;
     }
 }

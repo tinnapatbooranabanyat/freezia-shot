@@ -311,6 +311,12 @@ public partial class OverlayWindow : Window
             ActionBar.Visibility = Visibility.Collapsed;
         }
 
+        if (s.PickColorMode)
+        {
+            HintText.Text = Strings.PickColorHint;
+            BtnFull.Visibility = BtnAll.Visibility = Visibility.Collapsed;
+        }
+
         // ---- top bar: hidden while dragging; moves to the bottom if the selection is under it ----
         TopBar.Visibility = s.Mode == DragMode.None ? Visibility.Visible : Visibility.Collapsed;
         if (TopBar.Visibility == Visibility.Visible)

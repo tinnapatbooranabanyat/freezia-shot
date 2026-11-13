@@ -19,6 +19,8 @@ public static class Strings
     public static string TrayCaptureAll => T("แคปทุกจอ", "Capture all screens");
     public static string TrayOpenFolder => T("เปิดโฟลเดอร์ที่บันทึก", "Open save folder");
     public static string TraySettings => T("ตั้งค่า", "Settings");
+    public static string TrayHistory => T("ประวัติการแคป", "Capture history");
+    public static string TrayPickColor => T("ดูดสีจากหน้าจอ", "Pick a color from the screen");
     public static string TrayExit => T("ออก", "Exit");
     public static string HotkeyHookFailed => T("ไม่สามารถติดตั้งปุ่มลัดได้ — ใช้เมนูที่ไอคอนในถาดระบบแทน",
                                                "Could not register hotkeys — use the tray icon menu instead");
@@ -54,6 +56,20 @@ public static class Strings
     public static string QrNone => T("ไม่พบ QR code หรือบาร์โค้ดในภาพนี้", "No QR code or barcode found in this image");
     public static string QrFound => T("พบ {0} โค้ด ({1}) • คัดลอกแล้ว", "Found {0} code(s) ({1}) • copied");
     public static string QrFailed => T("อ่านโค้ดไม่สำเร็จ", "Could not read codes");
+    public static string PickColorHint => T("คลิกเพื่อคัดลอกสี (HEX) • Shift + คลิก = rgb(…) • Esc = ยกเลิก",
+                                            "Click to copy the color (HEX) • Shift + click = rgb(…) • Esc = cancel");
+    public static string ColorCopied => T("คัดลอกสีแล้ว", "Color copied");
+    public static string HistoryTitle => T("ประวัติการแคป", "Capture history");
+    public static string HistoryCount => T("{0} ภาพ", "{0} images");
+    public static string HistoryEmpty => T("ยังไม่มีประวัติ ภาพที่คุณคัดลอก บันทึก หรือแก้ไขจะมาอยู่ที่นี่", "No history yet — images you copy, save or edit appear here");
+    public static string HistoryClear => T("ล้างประวัติ", "Clear history");
+    public static string HistoryClearConfirm => T("ลบภาพทั้งหมดในประวัติการแคป? (ไฟล์ที่บันทึกไว้เองจะไม่ถูกลบ)", "Delete every image in the capture history? (files you saved yourself are kept)");
+    public static string HistoryShowFile => T("แสดงไฟล์ในโฟลเดอร์", "Show file in folder");
+    public static string HistoryCardTip => T("ดับเบิลคลิก = แก้ไข • คลิกขวา = ตัวเลือกเพิ่มเติม", "Double-click = edit • Right-click = more");
+    public static string SettingsHotkeyColor => T("ดูดสีจากหน้าจอ", "Pick a color from the screen");
+    public static string SettingsHistory => T("เก็บประวัติการแคป", "Keep a capture history");
+    public static string SettingsHistoryLimit => T("จำนวนภาพที่เก็บ", "Images to keep");
+    public static string SettingsHistoryHint => T("เก็บไว้ในเครื่องที่ %LocalAppData%\\Freezia\\history เท่านั้น • ปิดแล้วจะลบประวัติทั้งหมด", "Stored only on this PC in %LocalAppData%\\Freezia\\history • turning it off deletes the history");
     public static string ActionQr => T("อ่าน QR / บาร์โค้ด", "Read QR / barcode");
     public static string ActionEdit => T("แก้ไข", "Edit");
     public static string ActionCopy => T("คัดลอก", "Copy");
