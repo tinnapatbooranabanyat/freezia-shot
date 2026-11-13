@@ -4,7 +4,8 @@
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ResizeMode="NoResize" ShowInTaskbar="False" Topmost="True" ShowActivated="False"
         SizeToContent="WidthAndHeight" Focusable="False" Opacity="0"
-        UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
+        UseLayoutRounding="True" TextOptions.TextFormattingMode="Display"
+        FontFamily="{StaticResource UiFont}">
     <Border x:Name="Card" Margin="16" MinWidth="260" MaxWidth="380" CornerRadius="12"
             Background="{StaticResource SurfaceBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
             Effect="{StaticResource CardShadow}" Cursor="Hand" Padding="14,12">

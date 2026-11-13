@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using SnapEdit.Capture;
 using SnapEdit.Core;
 using SnapEdit.UI;
 
@@ -12,6 +13,8 @@ public partial class App : Application
 {
     private SingleInstance? _instance;
     private TrayIcon? _tray;
+    private HotkeyManager? _hotkeys;
+    private CaptureController? _capture;
 
     public static SettingsService Settings { get; } = new();
 
@@ -65,25 +68,41 @@ public partial class App : Application
         _tray.OpenSettings += OpenSettings;
         _tray.ExitRequested += ExitApp;
 
-        Settings.Changed += (_, _) => _tray?.UpdateHotkeys(Settings.Current);
+        _hotkeys = new HotkeyManager(Dispatcher);
+        _hotkeys.SetBindings(Settings.Current);
+        _hotkeys.Triggered += OnHotkey;
+        if (!_hotkeys.Start())
+            ToastWindow.ShowToast(Strings.HotkeyHookFailed, error: true);
+
+        _capture = new CaptureController(Settings, _hotkeys);
+
+        Settings.Changed += (_, _) =>
+        {
+            _tray?.UpdateHotkeys(Settings.Current);
+            _hotkeys?.SetBindings(Settings.Current);
+        };
+    }
+
+    public HotkeyManager? Hotkeys => _hotkeys;
+    public CaptureController? Capture => _capture;
+
+    private void OnHotkey(HotkeyAction action)
+    {
+        switch (action)
+        {
+            case HotkeyAction.CaptureRegion: CaptureRegion(); break;
+            case HotkeyAction.CaptureScreen: CaptureScreen(); break;
+            case HotkeyAction.CaptureAllScreens: CaptureAllScreens(); break;
+        }
     }
 
     // ---- Commands (filled in by later phases) ----
 
-    public void CaptureRegion()
-    {
-        Logger.Info("CaptureRegion requested");
-    }
+    public void CaptureRegion() => _capture?.CaptureRegion();
 
-    public void CaptureScreen()
-    {
-        Logger.Info("CaptureScreen requested");
-    }
+    public void CaptureScreen() => _capture?.CaptureScreen();
 
-    public void CaptureAllScreens()
-    {
-        Logger.Info("CaptureAll requested");
-    }
+    public void CaptureAllScreens() => _capture?.CaptureAllScreens();
 
     public void OpenSaveFolder()
     {
@@ -110,6 +129,8 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _hotkeys?.Dispose();
+        _hotkeys = null;
         _tray?.Dispose();
         _tray = null;
         _instance?.Dispose();

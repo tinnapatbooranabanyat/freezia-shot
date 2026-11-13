@@ -45,10 +45,9 @@
         </DrawingBrush.Drawing>
     </DrawingBrush>
 
-    <!-- ===== Base text ===== -->
-    <Style TargetType="TextBlock">
-        <Setter Property="FontFamily" Value="{StaticResource UiFont}" />
-    </Style>
+    <!-- ===== Base text =====
+         No implicit TextBlock style: it would override the icon font inside button templates.
+         Windows set FontFamily="{StaticResource UiFont}" and it inherits. -->
 
     <Style x:Key="IconText" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
