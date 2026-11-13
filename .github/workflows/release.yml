@@ -56,7 +56,8 @@ jobs:
       - name: Install Inno Setup
         run: |
           $f = Join-Path $env:RUNNER_TEMP 'innosetup.exe'
-          Invoke-WebRequest 'https://jrsoftware.org/download.php/is.exe' -OutFile $f -UseBasicParsing
+          # pinned version (same as local builds); official download from the Inno Setup GitHub releases
+          Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-7_1_1/innosetup-7.1.1-x64.exe' -OutFile $f -UseBasicParsing
           $sig = Get-AuthenticodeSignature $f
           if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'O=Pyrsys B\.V\.') {
             throw "Inno Setup download is not signed by its publisher ($($sig.Status) $($sig.SignerCertificate.Subject))"
