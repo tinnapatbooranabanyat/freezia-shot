@@ -35,9 +35,8 @@ public sealed class PinWindow : Window
     private readonly Image _img;
     private readonly Border _badge;
     private readonly TextBlock _badgeText = new() { FontSize = 12, Foreground = Brushes.White };
-    private readonly Border _lights;
+    private readonly TrafficLights _lights;
     private readonly Popup _lightsPopup;
-    private readonly FrameworkElement[] _glyphs = new FrameworkElement[3];
     private double _zoom = 1.0;
     private int _borderPx = 1;
     private PxRect _placed;
@@ -86,7 +85,16 @@ public sealed class PinWindow : Window
             Child = _badgeText,
         };
 
-        _lights = BuildLights();
+        _lights = new TrafficLights(Close, Minimize, ToggleFit,
+            () => Strings.PinClose, () => Strings.PinMinimize, () => _fitted ? Strings.PinRestore : Strings.PinFit)
+        {
+            Margin = new Thickness(6),
+            Opacity = 0,
+        };
+        _lights.MouseLeave += (_, _) => Dispatcher.BeginInvoke(() =>
+        {
+            if (!IsMouseOver && !_lights.IsMouseOver) ShowLights(false);
+        }, System.Windows.Threading.DispatcherPriority.Input);
         _lightsPopup = new Popup
         {
             AllowsTransparency = true,
@@ -429,76 +437,6 @@ public sealed class PinWindow : Window
     }
 
     // ================================================================ traffic lights
-
-    private Border BuildLights()
-    {
-        var row = new StackPanel { Orientation = Orientation.Horizontal };
-        var defs = new (string Fill, string Edge, string Glyph, Action Act, Func<string> Tip)[]
-        {
-            ("#FF5F57", "#E0443E", "M3,3 L9,9 M9,3 L3,9", Close, () => Strings.PinClose),
-            ("#FEBC2E", "#DEA123", "M2.5,6 H9.5", Minimize, () => Strings.PinMinimize),
-            ("#28C840", "#1AAB29", "M6,2.5 V9.5 M2.5,6 H9.5", ToggleFit, () => _fitted ? Strings.PinRestore : Strings.PinFit),
-        };
-        for (int i = 0; i < defs.Length; i++)
-        {
-            var d = defs[i];
-            var glyph = new Path
-            {
-                Data = Geometry.Parse(d.Glyph),
-                Stroke = new SolidColorBrush(Color.FromArgb(0x99, 0x40, 0x10, 0x00)),
-                StrokeThickness = 1.3,
-                StrokeStartLineCap = PenLineCap.Round,
-                StrokeEndLineCap = PenLineCap.Round,
-                Width = 12,
-                Height = 12,
-                Opacity = 0,
-                IsHitTestVisible = false,
-            };
-            _glyphs[i] = glyph;
-            var dot = new Grid { Width = 12, Height = 12, Margin = new Thickness(i == 0 ? 0 : 8, 0, 0, 0), Cursor = Cursors.Hand, Background = Brushes.Transparent };
-            dot.Children.Add(new Ellipse
-            {
-                Fill = (Brush)new BrushConverter().ConvertFromString(d.Fill)!,
-                Stroke = (Brush)new BrushConverter().ConvertFromString(d.Edge)!,
-                StrokeThickness = 0.8,
-            });
-            dot.Children.Add(glyph);
-            var act = d.Act;
-            var tip = d.Tip;
-            dot.ToolTipOpening += (_, _) => dot.ToolTip = tip();
-            dot.ToolTip = tip();
-            // a button: no DragMove, no double-click close, acts on release over the dot
-            dot.PreviewMouseLeftButtonDown += (_, e) => { dot.CaptureMouse(); e.Handled = true; };
-            dot.PreviewMouseLeftButtonUp += (_, e) =>
-            {
-                bool over = dot.IsMouseOver;
-                dot.ReleaseMouseCapture();
-                e.Handled = true;
-                if (over) Dispatcher.BeginInvoke(act);
-            };
-            row.Children.Add(dot);
-        }
-        var border = new Border
-        {
-            Background = new SolidColorBrush(Color.FromArgb(0x8C, 0x10, 0x10, 0x14)),
-            CornerRadius = new CornerRadius(9),
-            Padding = new Thickness(6, 4, 6, 4),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(6),
-            Opacity = 0,
-            Child = row,
-        };
-        // × − + appear inside the dots while pointing at the group (like macOS)
-        border.MouseEnter += (_, _) => { foreach (var g in _glyphs) g.Opacity = 1; };
-        border.MouseLeave += (_, _) =>
-        {
-            foreach (var g in _glyphs) g.Opacity = 0;
-            Dispatcher.BeginInvoke(() => { if (!IsMouseOver && !_lights.IsMouseOver) ShowLights(false); },
-                System.Windows.Threading.DispatcherPriority.Input);
-        };
-        return border;
-    }
 
     /// <summary>Very small pins: the buttons float above the image instead of covering it.</summary>
     private bool LightsOutside => ActualWidth < 80 || ActualHeight < 40;

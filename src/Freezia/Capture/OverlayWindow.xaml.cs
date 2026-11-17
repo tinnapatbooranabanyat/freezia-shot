@@ -159,6 +159,74 @@ public partial class OverlayWindow : Window
 
     // ---------------- rendering ----------------
 
+    /// <summary>
+    /// Top center by default; otherwise the first free spot (bottom center, then the corners) that the
+    /// selection, the action bar and the drawing toolbars don't cover. With drawing tools the selection is
+    /// covered by the edit window, so a bar under it could not be seen or clicked.
+    /// </summary>
+    private void PlaceTopBar(CaptureSession s, double w, double h)
+    {
+        TopBar.HorizontalAlignment = HorizontalAlignment.Left;
+        TopBar.VerticalAlignment = VerticalAlignment.Top;
+        var obstacles = new System.Collections.Generic.List<Rect>();
+        double pad = 6;
+        void Add(PxRect r)
+        {
+            if (r.Intersect(Monitor.Bounds).IsEmpty) return;
+            var lr = ToLocal(r);
+            lr.Inflate(pad, pad);
+            obstacles.Add(lr);
+        }
+        if (s.HasSelection) Add(s.Selection);
+        if (s.Editor != null) foreach (var r in s.Editor.CoveredAreas()) Add(r);
+        if (ActionBar.Visibility == Visibility.Visible)
+        {
+            var ar = new Rect(Canvas.GetLeft(ActionBar), Canvas.GetTop(ActionBar), ActionBar.DesiredSize.Width, ActionBar.DesiredSize.Height);
+            ar.Inflate(pad, pad);
+            obstacles.Add(ar);
+        }
+
+        // full bar first; when there is no room, the same bar without the hint text (narrower)
+        HintText.Visibility = Visibility.Visible;
+        if (FindSpot(obstacles, w, h) is not Point pick)
+        {
+            HintText.Visibility = Visibility.Collapsed;
+            pick = FindSpot(obstacles, w, h) ?? new Point((w - TopBar.DesiredSize.Width) / 2, 18);
+        }
+        TopBar.Margin = new Thickness(Math.Max(0, pick.X), Math.Max(0, pick.Y), 0, 0);
+    }
+
+    /// <summary>Top or bottom row: center, then the corners, then right beside each obstacle.</summary>
+    private Point? FindSpot(System.Collections.Generic.List<Rect> obstacles, double w, double h)
+    {
+        TopBar.Margin = new Thickness(0);
+        // the hint text may just have been hidden: measure again now, not at the next layout pass
+        (TopBar.Child as UIElement)?.InvalidateMeasure();
+        TopBar.InvalidateMeasure();
+        TopBar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        double bw = TopBar.DesiredSize.Width, bh = TopBar.DesiredSize.Height, m = 18;
+        if (bw > w - 2 * m) return null;
+        foreach (double y in new[] { m, h - bh - m })
+        {
+            var xs = new System.Collections.Generic.List<double> { (w - bw) / 2, m, w - bw - m };
+            foreach (var o in obstacles)
+            {
+                xs.Add(o.Left - bw - 1);
+                xs.Add(o.Right + 1);
+            }
+            foreach (double x0 in xs)
+            {
+                double x = Math.Clamp(x0, m, w - bw - m);
+                var r = new Rect(x, y, bw, bh);
+                bool free = true;
+                foreach (var o in obstacles)
+                    if (o.IntersectsWith(r)) { free = false; break; }
+                if (free) return new Point(x, y);
+            }
+        }
+        return null;
+    }
+
     private VisualBrush? _ghostBrush;
 
     /// <summary>
@@ -354,18 +422,9 @@ public partial class OverlayWindow : Window
             FullKey.Visibility = AllKey.Visibility = Visibility.Visible;
         }
 
-        // ---- top bar: hidden while dragging; moves to the bottom if the selection is under it ----
+        // ---- top bar: hidden while dragging; placed where the selection / toolbars don't cover it ----
         TopBar.Visibility = s.Mode == DragMode.None ? Visibility.Visible : Visibility.Collapsed;
-        if (TopBar.Visibility == Visibility.Visible)
-        {
-            bool overlaps = false;
-            if (s.HasSelection && !selOnMon.IsEmpty)
-            {
-                Rect sel = ToLocal(s.Selection);
-                overlaps = sel.Top < 90 && sel.Bottom > 0 && sel.Left < w / 2 + 300 && sel.Right > w / 2 - 300;
-            }
-            TopBar.VerticalAlignment = overlaps ? VerticalAlignment.Bottom : VerticalAlignment.Top;
-        }
+        if (TopBar.Visibility == Visibility.Visible) PlaceTopBar(s, w, h);
 
         // ---- loupe ----
         var (cx, cy) = s.Cursor;

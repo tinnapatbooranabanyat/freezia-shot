@@ -252,6 +252,14 @@ public sealed class CaptureEditor
         return false;
     }
 
+    /// <summary>Screen rectangles of the edit window and the visible toolbars (the overlay's top bar avoids them).</summary>
+    public System.Collections.Generic.IEnumerable<PxRect> CoveredAreas()
+    {
+        if (HostVisible) yield return _session.Selection;
+        foreach (var w in new[] { _toolsWindow, _styleWindow, _actionsWindow })
+            if (w.Placed is PxRect r) yield return r;
+    }
+
     /// <summary>Window to own dialogs (above the overlays and the edit window).</summary>
     public Window DialogOwner => HostVisible ? _host : _actionsWindow;
 
@@ -524,6 +532,9 @@ public sealed class CaptureEditor
         private readonly FrameworkElement _content;
         private bool _shown;
 
+        /// <summary>Where the bar is on screen while visible.</summary>
+        public PxRect? Placed { get; private set; }
+
         public ToolbarWindow(FrameworkElement content, bool activatable)
         {
             _content = content;
@@ -579,10 +590,12 @@ public sealed class CaptureEditor
             double s = VisualTreeHelper.GetDpi(this).DpiScaleX;
             Width = r.Width / s;
             Height = r.Height / s;
+            Placed = r;
         }
 
         public void HideBar()
         {
+            Placed = null;
             if (_shown && Visibility == Visibility.Visible) Visibility = Visibility.Hidden;
         }
     }

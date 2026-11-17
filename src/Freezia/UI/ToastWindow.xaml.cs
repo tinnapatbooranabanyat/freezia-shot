@@ -19,7 +19,9 @@ public partial class ToastWindow : Window
     private readonly DispatcherTimer _timer;
     private readonly string? _revealPath;
     private readonly Action? _onClick;
+    private readonly TrafficLights _lights;
     private bool _closing;
+    private bool _kept; // yellow button: stays until closed
 
     private ToastWindow(string title, string? message, string? revealPath, BitmapSource? thumb, bool error,
                         Action? onClick, double? seconds)
@@ -55,10 +57,31 @@ public partial class ToastWindow : Window
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(seconds ?? (error ? 4 : 3)) };
         _timer.Tick += (_, _) => FadeOut();
 
+        // red = close, yellow = keep it on screen, green = open the folder (or the toast's own action)
+        Action? green = revealPath != null ? () => { RevealInExplorer(revealPath); CloseNow(); }
+            : onClick != null ? () => { CloseNow(); onClick(); }
+            : null;
+        _lights = new TrafficLights(CloseNow, Keep, green,
+            () => Strings.Close, () => Strings.ToastKeep, () => revealPath != null ? Strings.ToastOpenFolder : Strings.ToastOpen)
+        {
+            Margin = new Thickness(8, 6, 0, 0),
+            Opacity = 0,
+            IsHitTestVisible = false,
+        };
+        Root.Children.Add(_lights);
+
         SourceInitialized += (_, _) => WindowHelper.MakeToolWindow(this, noActivate: true);
         Loaded += OnLoaded;
-        MouseEnter += (_, _) => _timer.Stop();
-        MouseLeave += (_, _) => { if (!_closing) _timer.Start(); };
+        MouseEnter += (_, _) =>
+        {
+            _timer.Stop();
+            FadeLights(true);
+        };
+        MouseLeave += (_, _) =>
+        {
+            FadeLights(false);
+            if (!_closing && !_kept) _timer.Start();
+        };
         MouseLeftButtonUp += OnClick;
     }
 
@@ -125,6 +148,20 @@ public partial class ToastWindow : Window
         {
             Logger.Error("Reveal in explorer failed", ex);
         }
+    }
+
+    /// <summary>Yellow: the toast no longer closes by itself.</summary>
+    private void Keep()
+    {
+        _kept = true;
+        _timer.Stop();
+        _lights.SetTip(1, Strings.ToastKept);
+    }
+
+    private void FadeLights(bool on)
+    {
+        _lights.IsHitTestVisible = on;
+        _lights.BeginAnimation(OpacityProperty, new DoubleAnimation(on ? 1 : 0, TimeSpan.FromMilliseconds(on ? 120 : 180)));
     }
 
     private void FadeOut()

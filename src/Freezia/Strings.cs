@@ -202,6 +202,12 @@ public static class Strings
     public static string SettingsAbout => T("Freezia เวอร์ชัน {0} • ภาพทั้งหมดอยู่ในเครื่องนี้เท่านั้น",
                                             "Freezia version {0} • Your screenshots never leave this PC");
 
+    // ---- notifications ----
+    public static string ToastKeep => T("ค้างไว้ ไม่ต้องปิดเอง", "Keep it on screen");
+    public static string ToastKept => T("ค้างไว้แล้ว (กดสีแดงเพื่อปิด)", "Kept (red closes it)");
+    public static string ToastOpenFolder => T("เปิดโฟลเดอร์", "Open the folder");
+    public static string ToastOpen => T("เปิด", "Open");
+
     // ---- pinned screenshots ----
     public static string PinClose => T("ปิด", "Close");
     public static string PinMinimize => T("ย่อ (คลิกภาพย่อเพื่อคืนขนาด)", "Minimize (click the thumbnail to restore)");

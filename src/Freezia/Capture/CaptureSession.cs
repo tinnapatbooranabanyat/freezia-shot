@@ -270,8 +270,8 @@ public sealed class CaptureSession
     {
         if (_finished) return;
         UpdateOwners();
+        Editor?.Sync(); // first: the overlays keep their top bar clear of the toolbars
         foreach (var o in _overlays) o.Render(this);
-        Editor?.Sync();
     }
 
     /// <summary>Overlays only (e.g. the drawings changed while the edit window is hidden).</summary>
