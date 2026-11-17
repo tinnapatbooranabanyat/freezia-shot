@@ -202,6 +202,14 @@ public static class Strings
     public static string SettingsAbout => T("Freezia เวอร์ชัน {0} • ภาพทั้งหมดอยู่ในเครื่องนี้เท่านั้น",
                                             "Freezia version {0} • Your screenshots never leave this PC");
 
+    // ---- pinned screenshots ----
+    public static string PinClose => T("ปิด", "Close");
+    public static string PinMinimize => T("ย่อ (คลิกภาพย่อเพื่อคืนขนาด)", "Minimize (click the thumbnail to restore)");
+    public static string PinFit => T("ขยายพอดีจอ", "Fit the screen");
+    public static string PinRestore => T("คืนขนาดเดิม", "Restore the previous size");
+    public static string PinMinimizeMenu => T("ย่อ", "Minimize");
+    public static string PinFitMenu => T("ขยายพอดีจอ", "Fit the screen");
+
     // ---- editing on the capture overlay ----
     public static string OpenInEditor => T("เปิดในหน้าต่างแก้ไข", "Open in the editor window");
     public static string OverlayHintTools => T("เลือกเครื่องมือเพื่อวาด • ลากในกรอบ = ย้ายกรอบ • กดเครื่องมือเดิมซ้ำ = เลิกวาด",
