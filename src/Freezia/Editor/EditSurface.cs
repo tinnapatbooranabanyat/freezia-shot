@@ -43,7 +43,10 @@ public sealed class EditSurface : UserControl
     private TextAnnotation? _textClick;
 
     // eraser
-    private readonly Ellipse _eraserCursor;
+    // brush / highlighter / eraser: a circle the size of what will be painted replaces the cursor
+    private readonly Grid _brushCursor;
+    private readonly Ellipse _cursorOuter, _cursorInner;
+    private bool _brushCircleOn;
     private bool _erasing;
     private readonly List<Point> _erasePoints = new();
     private readonly Dictionary<Annotation, GeometryGroup> _eraseApplied = new();
@@ -133,7 +136,12 @@ public sealed class EditSurface : UserControl
     public Cursor? CursorOverride
     {
         get => _cursorOverride;
-        set { _cursorOverride = value; RefreshCursor(); }
+        set
+        {
+            _cursorOverride = value;
+            if (value != null) HideBrushCursor();
+            RefreshCursor();
+        }
     }
     private Cursor? _cursorOverride;
 
@@ -173,13 +181,13 @@ public sealed class EditSurface : UserControl
         _handleEnd = MakeHandle();
         AdornerLayer.Children.Add(_handleStart);
         AdornerLayer.Children.Add(_handleEnd);
-        _eraserCursor = new Ellipse
-        {
-            Stroke = (Brush)FindResource("AccentBrush"),
-            Fill = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF)),
-            Visibility = Visibility.Collapsed,
-        };
-        AdornerLayer.Children.Add(_eraserCursor);
+        // two rings (dark outside, light inside) stay visible on any background
+        _cursorOuter = new Ellipse { Stroke = new SolidColorBrush(Color.FromArgb(0xB0, 0, 0, 0)) };
+        _cursorInner = new Ellipse { Stroke = Brushes.White, Fill = new SolidColorBrush(Color.FromArgb(0x18, 0xFF, 0xFF, 0xFF)) };
+        _brushCursor = new Grid { Visibility = Visibility.Collapsed, IsHitTestVisible = false };
+        _brushCursor.Children.Add(_cursorOuter);
+        _brushCursor.Children.Add(_cursorInner);
+        AdornerLayer.Children.Add(_brushCursor);
         _sizePreview = new Ellipse
         {
             Stroke = (Brush)FindResource("AccentBrush"),
@@ -224,6 +232,7 @@ public sealed class EditSurface : UserControl
         set
         {
             _viewScale = value > 0 ? value : 1;
+            if (_brushCircleOn) UpdateBrushCursor(_lastPointer);
             UpdateAdorner();
             StyleTextBox();
         }
@@ -248,6 +257,7 @@ public sealed class EditSurface : UserControl
         EditorTool.Select => Cursors.Arrow,
         EditorTool.Text => Cursors.IBeam,
         EditorTool.None => Cursors.Arrow,
+        _ when _brushCircleOn => Cursors.None, // the size circle is the cursor
         _ => Cursors.Cross,
     };
 
@@ -287,7 +297,8 @@ public sealed class EditSurface : UserControl
         _tool = tool;
         if (tool != EditorTool.Select) Select(null);
         RefreshCursor();
-        if (tool != EditorTool.Eraser) _eraserCursor.Visibility = Visibility.Collapsed;
+        if (BrushDiameter > 0 && InputElement?.IsMouseOver == true) UpdateBrushCursor(_lastPointer);
+        else HideBrushCursor();
         RaiseState();
     }
 
@@ -410,7 +421,7 @@ public sealed class EditSurface : UserControl
     {
         _lastPointer = p;
         PointerMoved?.Invoke(p);
-        if (_tool == EditorTool.Eraser) UpdateEraserCursor(p);
+        if (BrushDiameter > 0) UpdateBrushCursor(p);
 
         // brush: keep every point (appending is cheap)
         if (_drawing is StrokeAnnotation stroke)
@@ -522,7 +533,11 @@ public sealed class EditSurface : UserControl
         if (IsDragging) FinishDrag();
     }
 
-    public void PointerLeave() => _eraserCursor.Visibility = Visibility.Collapsed;
+    public void PointerLeave()
+    {
+        _brushCursor.Visibility = Visibility.Collapsed;
+        _brushCircleOn = false;
+    }
 
     private void FinishDrag()
     {
@@ -748,14 +763,49 @@ public sealed class EditSurface : UserControl
 
     public double EraserSize => _thickness * 3 + 6;
 
-    private void UpdateEraserCursor(Point p)
+    /// <summary>Diameter (image pixels) of what the current tool paints; 0 = no size circle for this tool.</summary>
+    public double BrushDiameter => _tool switch
     {
-        double d = EraserSize;
-        _eraserCursor.Width = _eraserCursor.Height = d;
-        _eraserCursor.StrokeThickness = 1.5 / _viewScale;
-        Canvas.SetLeft(_eraserCursor, p.X - d / 2);
-        Canvas.SetTop(_eraserCursor, p.Y - d / 2);
-        _eraserCursor.Visibility = Visibility.Visible;
+        EditorTool.Brush => _thickness,
+        EditorTool.Highlighter => _thickness * 3 + 8,
+        EditorTool.Eraser => EraserSize,
+        _ => 0,
+    };
+
+    /// <summary>
+    /// Brush / highlighter / eraser: the cursor becomes a circle as big as the stroke at the current zoom.
+    /// Very small sizes (under 4 screen pixels) keep the crosshair so the pointer stays visible.
+    /// </summary>
+    private void UpdateBrushCursor(Point p)
+    {
+        double d = BrushDiameter;
+        if (d <= 0 || d * _viewScale < 4 || _cursorOverride != null)
+        {
+            if (_brushCircleOn) HideBrushCursor();
+            return;
+        }
+        double px = 1 / _viewScale; // one screen pixel in image pixels
+        _cursorInner.Width = _cursorInner.Height = d;
+        _cursorInner.StrokeThickness = px;
+        _cursorOuter.Width = _cursorOuter.Height = d + 2 * px;
+        _cursorOuter.StrokeThickness = px;
+        _cursorInner.Margin = new Thickness(px);
+        Canvas.SetLeft(_brushCursor, p.X - d / 2 - px);
+        Canvas.SetTop(_brushCursor, p.Y - d / 2 - px);
+        _brushCursor.Visibility = Visibility.Visible;
+        if (!_brushCircleOn)
+        {
+            _brushCircleOn = true;
+            RefreshCursor();
+        }
+    }
+
+    private void HideBrushCursor()
+    {
+        _brushCursor.Visibility = Visibility.Collapsed;
+        if (!_brushCircleOn) return;
+        _brushCircleOn = false;
+        RefreshCursor();
     }
 
     /// <summary>
@@ -995,6 +1045,7 @@ public sealed class EditSurface : UserControl
         _fontSize = cur.FontSize;
 
         if (_textBox != null) StyleTextBox();
+        if (_brushCircleOn) UpdateBrushCursor(_lastPointer); // size changed: the circle follows
 
         var a = _selected;
         if (a != null)
@@ -1081,7 +1132,8 @@ public sealed class EditSurface : UserControl
             _sizePreview.StrokeThickness = 1.5 / s;
             Canvas.SetLeft(_sizePreview, p.X - diameter / 2);
             Canvas.SetTop(_sizePreview, p.Y - diameter / 2);
-            _sizePreview.Visibility = _tool == EditorTool.Eraser ? Visibility.Collapsed : Visibility.Visible;
+            // brush / highlighter / eraser: the cursor circle already shows the size
+            _sizePreview.Visibility = _brushCircleOn ? Visibility.Collapsed : Visibility.Visible;
         }
         else _sizePreview.Visibility = Visibility.Collapsed;
         _sizeText.Text = text;
