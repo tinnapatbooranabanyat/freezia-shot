@@ -1,0 +1,56 @@
+<UserControl x:Class="Freezia.Editor.StyleBar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ed="clr-namespace:Freezia.Editor">
+    <Grid>
+        <StackPanel x:Name="Row" Orientation="Horizontal">
+            <!-- stroke -->
+            <ToggleButton x:Name="StrokeTarget" Style="{StaticResource TargetButton}" Click="OnStrokeTargetClick">
+                <StackPanel>
+                    <Grid Width="24" Height="24" HorizontalAlignment="Center">
+                        <Ellipse Fill="{StaticResource CheckerBrush}" />
+                        <Ellipse x:Name="StrokeSwatch" Stroke="{DynamicResource SwatchRingBrush}" StrokeThickness="1" />
+                    </Grid>
+                    <TextBlock x:Name="StrokeCaption" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0"
+                               Foreground="{DynamicResource TextDimBrush}" />
+                </StackPanel>
+            </ToggleButton>
+            <!-- fill -->
+            <ToggleButton x:Name="FillTarget" Style="{StaticResource TargetButton}" Click="OnFillTargetClick" Margin="2,0,0,0">
+                <StackPanel>
+                    <Grid Width="24" Height="24" HorizontalAlignment="Center">
+                        <Ellipse Fill="{StaticResource CheckerBrush}" />
+                        <Ellipse x:Name="FillSwatch" Stroke="{DynamicResource SwatchRingBrush}" StrokeThickness="1" />
+                        <Path x:Name="FillOffSlash" Data="M3.5,20.5 L20.5,3.5" Stroke="{DynamicResource DangerBrush}"
+                              StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                    </Grid>
+                    <TextBlock x:Name="FillCaption" FontSize="10" HorizontalAlignment="Center" Margin="0,2,0,0"
+                               Foreground="{DynamicResource TextDimBrush}" />
+                </StackPanel>
+            </ToggleButton>
+            <CheckBox x:Name="FillToggle" Style="{StaticResource ToggleSwitch}" Margin="8,0,0,0" VerticalAlignment="Center"
+                      Click="OnFillToggle" />
+
+            <Border Style="{StaticResource ToolSeparator}" Margin="12,6" />
+            <WrapPanel x:Name="PresetPanel" Width="96" VerticalAlignment="Center" />
+
+            <Border Style="{StaticResource ToolSeparator}" Margin="10,6" />
+            <WrapPanel x:Name="SavedPanel" MaxWidth="144" VerticalAlignment="Center" />
+
+            <Border x:Name="RecentSeparator" Style="{StaticResource ToolSeparator}" Margin="10,6" />
+            <WrapPanel x:Name="RecentPanel" MaxWidth="96" VerticalAlignment="Center" />
+
+            <Border Style="{StaticResource ToolSeparator}" Margin="12,6" />
+
+            <TextBlock x:Name="SizeLabel" VerticalAlignment="Center" Foreground="{DynamicResource TextDimBrush}" FontSize="12" />
+            <Slider x:Name="SizeSlider" Width="130" VerticalAlignment="Center" Margin="10,0,6,0"
+                    Minimum="1" Maximum="30" SmallChange="1" LargeChange="2" IsSnapToTickEnabled="True" TickFrequency="1" />
+            <TextBlock x:Name="SizeValue" VerticalAlignment="Center" Width="30" FontSize="12" />
+        </StackPanel>
+
+        <Popup x:Name="PickerPopup" StaysOpen="True" AllowsTransparency="True" Placement="Bottom"
+               PopupAnimation="Fade" HorizontalOffset="-12" VerticalOffset="-6">
+            <ed:ColorPicker x:Name="Picker" />
+        </Popup>
+    </Grid>
+</UserControl>

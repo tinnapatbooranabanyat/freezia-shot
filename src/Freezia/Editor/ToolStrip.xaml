@@ -1,0 +1,66 @@
+<UserControl x:Class="Freezia.Editor.ToolStrip"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel x:Name="Panel" Orientation="Horizontal">
+        <RadioButton x:Name="ToolSelect" Style="{StaticResource ToolButton}">
+            <Path Style="{StaticResource ToolIconFilled}" Data="M5,2 L5,17.5 L9,13.6 L11.8,19.5 L14.2,18.4 L11.5,12.6 L17,12.6 Z" />
+        </RadioButton>
+        <RadioButton x:Name="ToolCrop" Style="{StaticResource ToolButton}">
+            <Path Style="{StaticResource ToolIcon}" Data="M5.5,1.5 V14.5 H18.5 M1.5,5.5 H14.5 V18.5" />
+        </RadioButton>
+        <Button x:Name="ResizeButton" Style="{StaticResource IconButton}" Click="OnResize">
+            <Path Style="{StaticResource ToolIcon}" Data="M2.5,8 V2.5 H8 M2.5,2.5 L8.5,8.5 M17.5,12 V17.5 H12 M17.5,17.5 L11.5,11.5" />
+        </Button>
+        <Border x:Name="SepTools" Style="{StaticResource ToolSeparator}" Margin="6,8" />
+        <RadioButton x:Name="ToolBrush" Style="{StaticResource ToolButton}">
+            <Path Style="{StaticResource ToolIcon}" Data="M3,16 C5,9 8,9 9,12 C10,15 13,15 14,10 C15,6 17,5 18,6" />
+        </RadioButton>
+        <RadioButton x:Name="ToolHighlighter" Style="{StaticResource ToolButton}">
+            <Path Style="{StaticResource ToolIcon}" Data="M12.5,3 L17,7.5 L9,15.5 L5,15.5 L4.5,11 Z M7.5,8 L12,12.5 M3,19 H17" />
+        </RadioButton>
+        <RadioButton x:Name="ToolLine" Style="{StaticResource ToolButton}">
+            <Path Style="{StaticResource ToolIcon}" Data="M4,16 L16,4" />
+        </RadioButton>
+        <RadioButton x:Name="ToolArrow" Style="{StaticResource ToolButton}">
+            <Path Style="{StaticResource ToolIcon}" Data="M4,16 L16,4 M8.5,4 H16 V11.5" />
+        </RadioButton>
+        <RadioButton x:Name="ToolRect" Style="{StaticResource ToolButton}">
+            <Path Style="{StaticResource ToolIcon}" Data="M3,5 H17 V15 H3 Z" />
+        </RadioButton>
+        <RadioButton x:Name="ToolEllipse" Style="{StaticResource ToolButton}">
+            <Path Style="{StaticResource ToolIcon}" Data="M2.5,10 A7.5,6 0 1 0 17.5,10 A7.5,6 0 1 0 2.5,10 Z" />
+        </RadioButton>
+        <RadioButton x:Name="ToolText" Style="{StaticResource ToolButton}">
+            <Path Style="{StaticResource ToolIcon}" Data="M4,6 V3.5 H16 V6 M10,3.5 V16.5 M7,16.5 H13" />
+        </RadioButton>
+        <RadioButton x:Name="ToolMosaic" Style="{StaticResource ToolButton}">
+            <Path Style="{StaticResource ToolIconFilled}"
+                  Data="M3,3 H7.5 V7.5 H3 Z M12.5,3 H17 V7.5 H12.5 Z M7.5,7.5 H12.5 V12.5 H7.5 Z M3,12.5 H7.5 V17 H3 Z M12.5,12.5 H17 V17 H12.5 Z" />
+        </RadioButton>
+        <RadioButton x:Name="ToolBlur" Style="{StaticResource ToolButton}">
+            <Path Style="{StaticResource ToolIcon}" Data="M10,2 C10,2 4,9 4,13 A6,6 0 0 0 16,13 C16,9 10,2 10,2 Z M7.5,13.5 A2.5,2.5 0 0 0 10,16" />
+        </RadioButton>
+        <RadioButton x:Name="ToolSpotlight" Style="{StaticResource ToolButton}">
+            <Path Style="{StaticResource ToolIcon}" Data="M2,3 H18 V17 H2 Z M10,6 A4,4 0 1 1 9.99,6 Z" />
+        </RadioButton>
+        <RadioButton x:Name="ToolStep" Style="{StaticResource ToolButton}">
+            <Grid Width="20" Height="20">
+                <Ellipse Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ButtonBase}}" StrokeThickness="1.7" />
+                <TextBlock Text="1" FontSize="11" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ButtonBase}}" />
+            </Grid>
+        </RadioButton>
+        <Border x:Name="SepEraser" Style="{StaticResource ToolSeparator}" Margin="6,8" />
+        <RadioButton x:Name="ToolEraser" Style="{StaticResource ToolButton}" Content="&#xE75C;" />
+
+        <!-- commands (capture overlay; the editor window has its own row) -->
+        <Border x:Name="SepCommands" Style="{StaticResource ToolSeparator}" Margin="6,8" />
+        <Button x:Name="UndoButton" Style="{StaticResource IconButton}" Content="&#xE7A7;" Click="OnUndo" />
+        <Button x:Name="RedoButton" Style="{StaticResource IconButton}" Content="&#xE7A6;" Click="OnRedo" />
+        <Button x:Name="DeleteButton" Style="{StaticResource IconButton}" Content="&#xE74D;" Click="OnDelete" />
+        <Button x:Name="ClearAllButton" Style="{StaticResource IconButton}" Click="OnClearAll">
+            <Path Style="{StaticResource ToolIcon}" Data="M3,4.5 H17 V15.5 H3 Z M7.5,7.5 L12.5,12.5 M12.5,7.5 L7.5,12.5" />
+        </Button>
+        <Button x:Name="OpenEditorButton" Style="{StaticResource IconButton}" Content="&#xE8A7;" Click="OnOpenEditor" />
+    </StackPanel>
+</UserControl>

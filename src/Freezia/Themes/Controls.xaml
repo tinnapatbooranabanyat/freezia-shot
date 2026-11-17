@@ -452,4 +452,89 @@
         </Setter>
     </Style>
 
+    <!-- ===== Editor toolbars (EditorWindow, ToolStrip, StyleBar, capture overlay) ===== -->
+    <!-- tool icons: stroke paths bound to the button foreground -->
+    <Style x:Key="ToolIcon" TargetType="Path">
+        <Setter Property="Width" Value="18" />
+        <Setter Property="Height" Value="18" />
+        <Setter Property="Stretch" Value="Uniform" />
+        <Setter Property="StrokeThickness" Value="1.7" />
+        <Setter Property="StrokeLineJoin" Value="Round" />
+        <Setter Property="StrokeStartLineCap" Value="Round" />
+        <Setter Property="StrokeEndLineCap" Value="Round" />
+        <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ButtonBase}}" />
+    </Style>
+    <Style x:Key="ToolIconFilled" TargetType="Path" BasedOn="{StaticResource ToolIcon}">
+        <Setter Property="StrokeThickness" Value="0" />
+        <Setter Property="Fill" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ButtonBase}}" />
+    </Style>
+
+    <!-- small round color swatch: no frames, a faint ring only so white/black stay visible -->
+    <Style x:Key="SwatchButton" TargetType="Button">
+        <Setter Property="Width" Value="18" />
+        <Setter Property="Height" Value="18" />
+        <Setter Property="Margin" Value="3" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                        <Ellipse Fill="{StaticResource CheckerBrush}" />
+                        <Ellipse Fill="{TemplateBinding Background}" Stroke="{DynamicResource SwatchRingBrush}" StrokeThickness="1" />
+                        <Ellipse x:Name="Hover" Margin="-3" Stroke="{DynamicResource AccentBrush}" StrokeThickness="2" Visibility="Collapsed" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Hover" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- "+" (save current color) -->
+    <Style x:Key="AddSwatchButton" TargetType="Button" BasedOn="{StaticResource SwatchButton}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid Background="Transparent">
+                        <Ellipse x:Name="Ring" Stroke="{DynamicResource TextDimBrush}" StrokeThickness="1" StrokeDashArray="2 2" />
+                        <Path Data="M4,9 H14 M9,4 V14" Stroke="{DynamicResource TextDimBrush}" StrokeThickness="1.4" Width="9" Height="9" Stretch="Uniform" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Ring" Property="Stroke" Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="Ring" Property="StrokeDashArray" Value="{x:Null}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- stroke / fill target: a clean color dot with a caption; the active one gets a soft accent background -->
+    <Style x:Key="TargetButton" TargetType="ToggleButton">
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Bd" CornerRadius="8" Padding="7,4" Background="Transparent">
+                        <ContentPresenter />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
 </ResourceDictionary>

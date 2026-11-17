@@ -25,6 +25,8 @@ public enum EditorTool
     Blur,
     Spotlight,
     Crop,
+    /// <summary>No tool (capture overlay): the selection can be moved / resized, nothing is drawn.</summary>
+    None,
 }
 
 public enum RedactMode

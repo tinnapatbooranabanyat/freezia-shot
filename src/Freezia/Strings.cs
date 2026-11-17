@@ -202,6 +202,9 @@ public static class Strings
     public static string SettingsAbout => T("Freezia เวอร์ชัน {0} • ภาพทั้งหมดอยู่ในเครื่องนี้เท่านั้น",
                                             "Freezia version {0} • Your screenshots never leave this PC");
 
+    // ---- editing on the capture overlay ----
+    public static string OpenInEditor => T("เปิดในหน้าต่างแก้ไข", "Open in the editor window");
+
     // ---- editing other images ----
     public static string TrayOpenImage => T("เปิดภาพมาแก้ไข…", "Open image to edit…");
     public static string TrayEditClipboard => T("แก้ไขภาพจากคลิปบอร์ด", "Edit image from clipboard");
