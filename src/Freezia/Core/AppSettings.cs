@@ -37,6 +37,9 @@ public sealed class AppSettings
 
     public CaptureMethod CaptureMethod { get; set; } = CaptureMethod.Auto;
 
+    /// <summary>Drawing tools right on the capture screen (Lightshot style); off = the classic action bar only.</summary>
+    public bool OverlayTools { get; set; } = true;
+
     /// <summary>Check GitHub for a newer version at start-up and every few hours.</summary>
     public bool AutoCheckUpdates { get; set; } = true;
     public int HistoryLimit { get; set; } = 50;

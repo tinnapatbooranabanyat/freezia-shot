@@ -97,7 +97,7 @@ public partial class App : Application
             ToastWindow.ShowToast(Strings.HotkeyHookFailed, error: true);
 
         _capture = new CaptureController(Settings, _hotkeys);
-        _capture.OpenEditor = OpenEditor;
+        _capture.OpenEditor = img => OpenEditor(img, null);
 
         StartUpdateChecks();
         SingleInstance.TakeQueued(); // stale requests from a previous session
@@ -283,9 +283,9 @@ public partial class App : Application
         }
     }
 
-    private void OpenEditor(PixelImage image) => OpenEditor(image, null);
+    private void OpenEditor(PixelImage image) => _ = OpenEditor(image, null);
 
-    private void OpenEditor(PixelImage image, string? sourcePath)
+    private Freezia.Editor.EditorWindow? OpenEditor(PixelImage image, string? sourcePath)
     {
         try
         {
@@ -293,11 +293,13 @@ public partial class App : Application
             editor.Show();
             Freezia.Native.NativeMethods.ForceForeground(new System.Windows.Interop.WindowInteropHelper(editor).Handle);
             editor.Activate();
+            return editor;
         }
         catch (Exception ex)
         {
             Logger.Error("Editor failed to open", ex);
             ToastWindow.ShowToast(Strings.ErrorTitle, ex.Message, error: true);
+            return null;
         }
     }
 

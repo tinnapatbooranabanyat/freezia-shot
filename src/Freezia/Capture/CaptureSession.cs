@@ -6,6 +6,8 @@ using System.Windows.Threading;
 using Freezia.Native;
 using System.Windows.Input;
 using Freezia.Core;
+using Freezia.Editor;
+using Freezia.UI;
 
 namespace Freezia.Capture;
 
@@ -73,6 +75,42 @@ public sealed class CaptureSession
 
     /// <summary>Screen color picker: no selection, the loupe follows the mouse, a click picks a color.</summary>
     public bool PickColorMode { get; init; }
+
+    /// <summary>Drawing tools on the overlay (settings: "show drawing tools on the capture screen").</summary>
+    public bool ToolsEnabled { get; init; }
+
+    /// <summary>Needed for the drawing tools (style, saved colors).</summary>
+    public SettingsService? Settings { get; init; }
+
+    /// <summary>Lightshot-style drawing on the overlay (null when the tools are off).</summary>
+    public CaptureEditor? Editor { get; private set; }
+
+    /// <summary>The keyboard must go to a text box (typing, dialog) instead of the capture shortcuts.</summary>
+    public event Action<bool>? TextInputChanged;
+
+    /// <summary>Drawings handed to the editor window (outcome Edit), moved into its image coordinates.</summary>
+    public List<Annotation>? HandOverItems { get; private set; }
+    public System.Windows.Vector HandOverShift { get; private set; }
+
+    /// <summary>The selection covers monitors with different DPI: drawing is paused there.</summary>
+    public bool IsCrossDpi
+    {
+        get
+        {
+            if (!HasSelection) return false;
+            double? scale = null;
+            foreach (var m in _monitors)
+            {
+                if (m.Bounds.Intersect(Selection).IsEmpty) continue;
+                if (scale == null) scale = m.Scale;
+                else if (Math.Abs(scale.Value - m.Scale) > 0.001) return true;
+            }
+            return false;
+        }
+    }
+
+    /// <summary>The frame's resize handles are under this screen point.</summary>
+    internal bool IsOnHandle(int x, int y) => HasSelection && Mode == DragMode.None && HitHandle(x, y) != SelectionHandle.None;
     public System.Windows.Media.Color PickedColor { get; private set; }
     public bool PickedAsRgb { get; private set; }
 
@@ -217,6 +255,11 @@ public sealed class CaptureSession
             w.Show();
         }
         var target = _overlays.FirstOrDefault(o => o.Monitor.Bounds.Contains(Cursor.X, Cursor.Y)) ?? _overlays.FirstOrDefault();
+        if (ToolsEnabled && !PickColorMode && Settings != null)
+        {
+            Editor = new CaptureEditor(this, Settings);
+            Editor.TextInputChanged += on => TextInputChanged?.Invoke(on);
+        }
         target?.FocusOverlay();
         UpdateHover(Cursor.X, Cursor.Y);
         StartCtrlWatch();
@@ -227,6 +270,14 @@ public sealed class CaptureSession
     {
         if (_finished) return;
         UpdateOwners();
+        foreach (var o in _overlays) o.Render(this);
+        Editor?.Sync();
+    }
+
+    /// <summary>Overlays only (e.g. the drawings changed while the edit window is hidden).</summary>
+    public void RefreshOverlays()
+    {
+        if (_finished) return;
         foreach (var o in _overlays) o.Render(this);
     }
 
@@ -270,6 +321,7 @@ public sealed class CaptureSession
             Finish(CaptureOutcome.ColorPicked);
             return;
         }
+        Editor?.OnOverlayMouseDown();
 
         if (clickCount >= 2 && HasSelection && Selection.Contains(x, y))
         {
@@ -394,7 +446,7 @@ public sealed class CaptureSession
         return new PxRect(n.X, n.Y, Math.Max(1, n.Width), Math.Max(1, n.Height));
     }
 
-    private SelectionHandle HitHandle(int x, int y)
+    internal SelectionHandle HitHandle(int x, int y)
     {
         if (!HasSelection) return SelectionHandle.None;
         var mon = MonitorAt(x, y);
@@ -435,6 +487,11 @@ public sealed class CaptureSession
         if (PickColorMode)
         {
             if (vk == 0x1B) Finish(CaptureOutcome.Cancel);
+            return;
+        }
+        if (Editor != null)
+        {
+            HandleToolKey(vk, mods);
             return;
         }
         bool ctrl = mods.HasFlag(HotkeyModifiers.Ctrl), shift = mods.HasFlag(HotkeyModifiers.Shift);
@@ -485,6 +542,95 @@ public sealed class CaptureSession
         }
     }
 
+    /// <summary>
+    /// Keys with drawing tools on: before a frame exists F / A / Esc work as before; with a frame, letters pick
+    /// tools (V B H L A R O T M N E U S, same letter again = no tool), P = pin, Q = QR, Ctrl+T = OCR,
+    /// Ctrl+E = editor window, Ctrl+Z / Y = undo / redo, Delete = delete the selected drawing,
+    /// arrows move the selected drawing (or the frame), Esc goes back one step at a time.
+    /// </summary>
+    private void HandleToolKey(int vk, HotkeyModifiers mods)
+    {
+        var ed = Editor!;
+        var surf = ed.Surface;
+        bool ctrl = mods.HasFlag(HotkeyModifiers.Ctrl), shift = mods.HasFlag(HotkeyModifiers.Shift);
+        bool arrow = vk is >= 0x25 and <= 0x28;
+
+        if (vk == 0x1B) // Esc
+        {
+            if (Mode != DragMode.None)
+            {
+                Mode = DragMode.None;
+                Selection = _startSel;
+                RefreshAll();
+            }
+            else if (!HasSelection || !ed.Escape()) ConfirmCancel();
+            return;
+        }
+        if (!HasSelection)
+        {
+            if (ctrl) return;
+            if (vk == 0x46) FullScreen(Monitors.FromCursor()); // F
+            else if (vk == 0x41) Finish(CaptureOutcome.AllScreens); // A
+            return;
+        }
+        if (ctrl)
+        {
+            switch (vk)
+            {
+                case 0x43: Finish(CaptureOutcome.Copy); break;                                       // Ctrl+C
+                case 0x53: Finish(shift ? CaptureOutcome.SaveAs : CaptureOutcome.Save); break;       // Ctrl+S
+                case 0x5A: if (shift) surf.DoRedo(); else surf.DoUndo(); break;                      // Ctrl+Z
+                case 0x59: surf.DoRedo(); break;                                                     // Ctrl+Y
+                case 0x54: Finish(CaptureOutcome.Ocr); break;                                        // Ctrl+T
+                case 0x45: Finish(CaptureOutcome.Edit); break;                                       // Ctrl+E
+                default:
+                    if (arrow && Mode == DragMode.None) Nudge(vk, shift ? 10 : 1, resize: true);
+                    break;
+            }
+            return;
+        }
+        switch (vk)
+        {
+            case 0x0D: Finish(CaptureOutcome.Copy); return;          // Enter
+            case 0x2E or 0x08: surf.DeleteSelected(); return;         // Delete / Backspace
+            case 0x50: Finish(CaptureOutcome.Pin); return;            // P
+            case 0x51: Finish(CaptureOutcome.Qr); return;             // Q
+        }
+        if (arrow)
+        {
+            if (Mode != DragMode.None) return;
+            if (surf.Selected != null)
+            {
+                var key = vk switch { 0x25 => Key.Left, 0x26 => Key.Up, 0x27 => Key.Right, _ => Key.Down };
+                surf.NudgeSelected(key, shift ? 10 : 1);
+            }
+            else Nudge(vk, shift ? 10 : 1, resize: false);
+            return;
+        }
+        if (EditSurface.ToolForKey(KeyInterop.KeyFromVirtualKey(vk)) is EditorTool tool) ed.ToggleTool(tool);
+    }
+
+    /// <summary>Cancel the capture; asks first when there are drawings.</summary>
+    private void ConfirmCancel()
+    {
+        var ed = Editor;
+        if (ed != null && ed.Surface.Items.Count > 0)
+        {
+            TextInputChanged?.Invoke(true); // the dialog needs Enter / Esc
+            bool yes;
+            try
+            {
+                yes = ConfirmDialog.Show(ed.DialogOwner, Strings.CaptureDiscard, Strings.CaptureDiscardYes, Strings.CaptureDiscardNo);
+            }
+            finally
+            {
+                TextInputChanged?.Invoke(false);
+            }
+            if (!yes) return;
+        }
+        Finish(CaptureOutcome.Cancel);
+    }
+
     private void Nudge(int vk, int step, bool resize)
     {
         int dx = vk == 0x25 ? -step : vk == 0x27 ? step : 0;
@@ -514,6 +660,11 @@ public sealed class CaptureSession
         Finish(CaptureOutcome.FullScreen);
     }
 
+    private bool HasDrawings => Editor != null && Editor.Surface.Items.Count > 0;
+
+    /// <summary>A screen rectangle of the capture, with the drawings when there are any.</summary>
+    private PixelImage Region(PxRect r) => HasDrawings ? Editor!.Render(r) : Shot.CropScreen(r);
+
     public void Finish(CaptureOutcome outcome)
     {
         if (_finished) return;
@@ -528,14 +679,21 @@ public sealed class CaptureSession
                 case CaptureOutcome.ColorPicked:
                     break;
                 case CaptureOutcome.FullScreen:
-                    result = Shot.CropScreen((_fullScreenMonitor ?? Monitors.FromCursor()).Bounds);
+                    result = Region((_fullScreenMonitor ?? Monitors.FromCursor()).Bounds);
                     break;
                 case CaptureOutcome.AllScreens:
-                    result = Shot;
+                    result = HasDrawings ? Region(Shot.Bounds) : Shot;
+                    break;
+                case CaptureOutcome.Edit when Editor != null:
+                    if (!HasSelection) { outcome = CaptureOutcome.Cancel; break; }
+                    // the editor window continues with the screenshot and the (still editable) drawings
+                    result = Shot.CropScreen(Selection);
+                    HandOverShift = new System.Windows.Vector(-(Selection.X - Shot.OriginX), -(Selection.Y - Shot.OriginY));
+                    HandOverItems = Editor.DetachItems();
                     break;
                 default:
                     if (!HasSelection) outcome = CaptureOutcome.Cancel;
-                    else result = Shot.CropScreen(Selection);
+                    else result = Region(Selection);
                     break;
             }
         }
@@ -546,6 +704,7 @@ public sealed class CaptureSession
             result = null;
         }
 
+        try { Editor?.Close(); } catch (Exception ex) { Logger.Error("Closing the capture editor failed", ex); }
         foreach (var o in _overlays)
         {
             try { o.Close(); } catch { /* ignore */ }

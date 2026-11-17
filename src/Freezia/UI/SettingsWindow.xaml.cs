@@ -65,6 +65,7 @@ public partial class SettingsWindow : Window
         MethodAuto.IsChecked = _edit.CaptureMethod == CaptureMethod.Auto;
         MethodGdi.IsChecked = _edit.CaptureMethod == CaptureMethod.Gdi;
         HistoryToggle.IsChecked = _edit.HistoryEnabled;
+        OverlayToolsToggle.IsChecked = _edit.OverlayTools;
         UpdateToggle.IsChecked = _edit.AutoCheckUpdates;
         HistoryLimitSlider.Value = Math.Clamp(_edit.HistoryLimit, 10, 200);
         HistoryLimitValue.Text = ((int)HistoryLimitSlider.Value).ToString();
@@ -159,6 +160,8 @@ public partial class SettingsWindow : Window
         LblAll.Text = Strings.SettingsHotkeyAll;
         LblColor.Text = Strings.SettingsHotkeyColor;
         HistoryToggle.Content = Strings.SettingsHistory;
+        OverlayToolsToggle.Content = Strings.SettingsOverlayTools;
+        OverlayToolsHint.Text = Strings.SettingsOverlayToolsHint;
         UpdateToggle.Content = Strings.SettingsAutoUpdate;
         UpdateHint.Text = Strings.SettingsUpdateHint;
         CheckUpdateButton.Content = Strings.SettingsCheckNow;
@@ -543,6 +546,7 @@ public partial class SettingsWindow : Window
         _edit.HotkeyAllScreens = BoxAll.Hotkey;
         _edit.HotkeyColorPicker = BoxColor.Hotkey;
         _edit.HistoryEnabled = HistoryToggle.IsChecked == true;
+        _edit.OverlayTools = OverlayToolsToggle.IsChecked == true;
         _edit.AutoCheckUpdates = UpdateToggle.IsChecked == true;
         _edit.CaptureMethod = MethodGdi.IsChecked == true ? CaptureMethod.Gdi : CaptureMethod.Auto;
         _edit.HistoryLimit = (int)HistoryLimitSlider.Value;

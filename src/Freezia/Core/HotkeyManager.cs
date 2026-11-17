@@ -88,7 +88,34 @@ public sealed class HotkeyManager : IDisposable
     }
 
     /// <summary>Route overlay keys to <paramref name="handler"/> (UI thread). Pass null to leave capture mode.</summary>
-    public void SetCaptureHandler(Action<int, HotkeyModifiers>? handler) => _captureHandler = handler;
+    public void SetCaptureHandler(Action<int, HotkeyModifiers>? handler)
+    {
+        _captureHandler = handler;
+        if (handler == null)
+        {
+            CaptureTools = false;
+            CaptureTextInput = false;
+        }
+    }
+
+    private volatile bool _captureTools, _captureTextInput;
+
+    /// <summary>The capture overlay has drawing tools: letters pick tools, Ctrl+Z/Y/T/E, Delete.</summary>
+    public bool CaptureTools
+    {
+        get => _captureTools;
+        set => _captureTools = value;
+    }
+
+    /// <summary>
+    /// A text box of the capture has focus (drawing text, color values, a dialog): no capture key is taken,
+    /// every key goes to the focused window (Thai input, IME). Hotkeys that start a capture stay blocked.
+    /// </summary>
+    public bool CaptureTextInput
+    {
+        get => _captureTextInput;
+        set => _captureTextInput = value;
+    }
 
     public void BeginRecording(Action<Hotkey> onKey, Action<HotkeyModifiers> onModifiers, Action onCancel, Action onClear) =>
         _recording = new RecordingCallbacks(onKey, onModifiers, onCancel, onClear);
@@ -232,7 +259,8 @@ public sealed class HotkeyManager : IDisposable
                 _swallowedDown.Add(vk); // ignore hotkeys while already capturing
                 return true;
             }
-            if (IsCaptureKey(vk, modifiers))
+            if (_captureTextInput) return false;
+            if (_captureTools ? IsCaptureToolKey(vk, modifiers) : IsCaptureKey(vk, modifiers))
             {
                 _swallowedDown.Add(vk);
                 bool isArrow = vk is >= 0x25 and <= 0x28;
@@ -279,6 +307,25 @@ public sealed class HotkeyManager : IDisposable
             0x45 or 0x46 or 0x41 => !ctrl,         // E, F, A
             0x50 or 0x54 or 0x51 => !ctrl,         // P (pin), T (OCR), Q (QR)
             >= 0x25 and <= 0x28 => true,           // arrows
+            _ => false,
+        };
+    }
+
+    /// <summary>Keys of the capture overlay with drawing tools.</summary>
+    private static bool IsCaptureToolKey(int vk, HotkeyModifiers m)
+    {
+        bool ctrl = m.HasFlag(HotkeyModifiers.Ctrl), alt = m.HasFlag(HotkeyModifiers.Alt);
+        if (alt) return false;
+        return vk switch
+        {
+            0x1B or 0x0D => true,                           // Esc, Enter
+            >= 0x25 and <= 0x28 => true,                    // arrows
+            0x2E or 0x08 => !ctrl,                          // Delete, Backspace
+            0x43 or 0x5A or 0x59 => ctrl,                   // Ctrl+C, Ctrl+Z, Ctrl+Y
+            0x53 => true,                                   // S (spotlight), Ctrl+S, Ctrl+Shift+S
+            0x54 or 0x45 => true,                           // T / E (tools), Ctrl+T (OCR), Ctrl+E (editor)
+            0x56 or 0x42 or 0x48 or 0x4C or 0x41 or 0x52 or 0x4F or 0x4D or 0x4E or 0x55 => !ctrl, // V B H L A R O M N U
+            0x46 or 0x50 or 0x51 => !ctrl,                  // F, P, Q
             _ => false,
         };
     }

@@ -18,7 +18,7 @@ public sealed class CaptureController
     private CaptureSession? _session;
 
     /// <summary>Opens the editor for an image (set by the app once the editor exists).</summary>
-    public Action<PixelImage>? OpenEditor { get; set; }
+    public Func<PixelImage, Freezia.Editor.EditorWindow?>? OpenEditor { get; set; }
 
     public CaptureController(SettingsService settings, HotkeyManager hotkeys)
     {
@@ -47,10 +47,16 @@ public sealed class CaptureController
             return;
         }
 
-        var session = new CaptureSession(shot, Monitors.GetAll(), windows);
+        var session = new CaptureSession(shot, Monitors.GetAll(), windows)
+        {
+            ToolsEnabled = _settings.Current.OverlayTools,
+            Settings = _settings,
+        };
         _session = session;
         session.Finished += OnSessionFinished;
+        session.TextInputChanged += on => _hotkeys.CaptureTextInput = on;
         _hotkeys.SetCaptureHandler(session.HandleKey);
+        _hotkeys.CaptureTools = session.ToolsEnabled;
         try
         {
             session.Show();
@@ -115,7 +121,15 @@ public sealed class CaptureController
             case CaptureOutcome.Copy: Copy(image.Source); break;
             case CaptureOutcome.Save: Save(image.Source); break;
             case CaptureOutcome.SaveAs: SaveAs(image.Source, null); break;
-            case CaptureOutcome.Edit: Edit(image); break;
+            case CaptureOutcome.Edit:
+                if (session?.HandOverItems is { } items)
+                {
+                    // drawings made on the capture continue in the editor window, still editable
+                    var editor = OpenEditor?.Invoke(image);
+                    editor?.ImportItems(items, session.HandOverShift);
+                }
+                else Edit(image);
+                break;
             case CaptureOutcome.FullScreen:
             case CaptureOutcome.AllScreens:
                 HandleFullCapture(image);

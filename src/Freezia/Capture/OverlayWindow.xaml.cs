@@ -33,14 +33,7 @@ public partial class OverlayWindow : Window
         FullText.Text = Strings.OverlayFullScreen;
         AllText.Text = Strings.OverlayAllScreens;
         CancelText.Text = Strings.OverlayCancel;
-        BtnEdit.ToolTip = Strings.ActionEdit + " (E)";
-        BtnCopy.ToolTip = Strings.ActionCopy + " (Ctrl+C / Enter)";
-        BtnSave.ToolTip = Strings.ActionSave + " (Ctrl+S)";
-        BtnSaveAs.ToolTip = Strings.ActionSaveAs + " (Ctrl+Shift+S)";
-        BtnCancel.ToolTip = Strings.ActionCancel + " (Esc)";
-        BtnPin.ToolTip = Strings.ActionPin + " (P)";
-        BtnOcr.ToolTip = Strings.ActionOcr + " (T)";
-        BtnQr.ToolTip = Strings.ActionQr + " (Q)";
+        Actions.Requested += o => _session.Finish(o);
 
         // Frozen screenshot for this monitor.
         var local = monitor.Bounds.Intersect(shot.Bounds).Offset(-shot.OriginX, -shot.OriginY);
@@ -160,18 +153,48 @@ public partial class OverlayWindow : Window
         e.Handled = true;
     }
 
-    private void OnEdit(object sender, RoutedEventArgs e) => _session.Finish(CaptureOutcome.Edit);
-    private void OnCopy(object sender, RoutedEventArgs e) => _session.Finish(CaptureOutcome.Copy);
-    private void OnSave(object sender, RoutedEventArgs e) => _session.Finish(CaptureOutcome.Save);
-    private void OnSaveAs(object sender, RoutedEventArgs e) => _session.Finish(CaptureOutcome.SaveAs);
     private void OnCancel(object sender, RoutedEventArgs e) => _session.Finish(CaptureOutcome.Cancel);
     private void OnFullScreen(object sender, RoutedEventArgs e) => _session.FullScreen(Monitor);
-    private void OnPin(object sender, RoutedEventArgs e) => _session.Finish(CaptureOutcome.Pin);
-    private void OnOcr(object sender, RoutedEventArgs e) => _session.Finish(CaptureOutcome.Ocr);
-    private void OnQr(object sender, RoutedEventArgs e) => _session.Finish(CaptureOutcome.Qr);
     private void OnAllScreens(object sender, RoutedEventArgs e) => _session.Finish(CaptureOutcome.AllScreens);
 
     // ---------------- rendering ----------------
+
+    private VisualBrush? _ghostBrush;
+
+    /// <summary>
+    /// Show the drawings of the capture editor on this monitor, clipped to the selection. Used while the
+    /// edit window is hidden (dragging the frame, frame across monitors with different DPI).
+    /// </summary>
+    private void RenderGhost(CaptureSession s)
+    {
+        var ed = s.Editor;
+        PxRect selOnMon = s.HasSelection ? s.Selection.Intersect(Monitor.Bounds) : default;
+        if (ed == null || selOnMon.IsEmpty || ed.Surface.Items.Count == 0 || ed.HostVisible)
+        {
+            Ghost.Visibility = Visibility.Collapsed;
+            return;
+        }
+        if (_ghostBrush == null || _ghostBrush.Visual != ed.Surface.ExportRoot)
+        {
+            _ghostBrush = new VisualBrush(ed.Surface.ExportRoot)
+            {
+                ViewboxUnits = BrushMappingMode.Absolute,
+                ViewportUnits = BrushMappingMode.RelativeToBoundingBox,
+                Stretch = Stretch.Fill,
+            };
+            RenderOptions.SetBitmapScalingMode(_ghostBrush, BitmapScalingMode.NearestNeighbor);
+            Ghost.Fill = _ghostBrush;
+        }
+        // this monitor in shot (image) pixels -> the whole window
+        var m = Monitor.Bounds;
+        _ghostBrush.Viewbox = new Rect(m.X - s.Shot.OriginX, m.Y - s.Shot.OriginY, m.Width, m.Height);
+        Ghost.Width = Root.ActualWidth;
+        Ghost.Height = Root.ActualHeight;
+        Canvas.SetLeft(Ghost, 0);
+        Canvas.SetTop(Ghost, 0);
+        Ghost.Clip = new RectangleGeometry(ToLocal(s.Selection));
+        Ghost.Visibility = Visibility.Visible;
+    }
 
     public void SetCursorShape(Cursor c)
     {
@@ -287,8 +310,11 @@ public partial class OverlayWindow : Window
             SizeLabel.Visibility = Visibility.Collapsed;
         }
 
-        // ---- action bar ----
-        if (s.HasSelection && s.Mode == DragMode.None && s.ActionMonitor == Monitor)
+        // ---- drawings (screen-anchored, clipped to the selection) ----
+        RenderGhost(s);
+
+        // ---- action bar (with drawing tools it lives in its own window next to the tools) ----
+        if (s.HasSelection && s.Mode == DragMode.None && s.ActionMonitor == Monitor && s.Editor == null)
         {
             ActionBar.Visibility = Visibility.Visible;
             ActionBar.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
@@ -315,6 +341,17 @@ public partial class OverlayWindow : Window
         {
             HintText.Text = Strings.PickColorHint;
             BtnFull.Visibility = BtnAll.Visibility = Visibility.Collapsed;
+        }
+        else if (s.Editor != null && s.HasSelection)
+        {
+            // letters pick drawing tools now: F / A are buttons only
+            HintText.Text = s.IsCrossDpi ? Strings.OverlayCrossDpi : Strings.OverlayHintTools;
+            FullKey.Visibility = AllKey.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            HintText.Text = Strings.OverlayHint;
+            FullKey.Visibility = AllKey.Visibility = Visibility.Visible;
         }
 
         // ---- top bar: hidden while dragging; moves to the bottom if the selection is under it ----

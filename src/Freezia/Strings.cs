@@ -204,6 +204,16 @@ public static class Strings
 
     // ---- editing on the capture overlay ----
     public static string OpenInEditor => T("เปิดในหน้าต่างแก้ไข", "Open in the editor window");
+    public static string OverlayHintTools => T("เลือกเครื่องมือเพื่อวาด • ลากในกรอบ = ย้ายกรอบ • กดเครื่องมือเดิมซ้ำ = เลิกวาด",
+                                               "Pick a tool to draw • drag inside = move the frame • same tool again = stop drawing");
+    public static string OverlayCrossDpi => T("กรอบคร่อมจอที่ขนาดการแสดงผลต่างกัน ย้ายกรอบให้อยู่ในจอเดียวเพื่อวาดต่อ",
+                                              "The frame spans screens with different scaling: move it onto one screen to draw");
+    public static string CaptureDiscard => T("ยกเลิกการแคปและทิ้งสิ่งที่วาดไว้?", "Cancel the capture and discard the drawings?");
+    public static string CaptureDiscardYes => T("ทิ้ง", "Discard");
+    public static string CaptureDiscardNo => T("วาดต่อ", "Keep drawing");
+    public static string SettingsOverlayTools => T("แสดงเครื่องมือวาดบนหน้าแคปจอ", "Show drawing tools on the capture screen");
+    public static string SettingsOverlayToolsHint => T("วาด ใส่ข้อความ เบลอ ได้ทันทีหลังเลือกพื้นที่ (แบบ Lightshot) • ปิด = ใช้แถบปุ่มแบบเดิมและเปิดหน้าต่างแก้ไขด้วยปุ่ม E",
+                                                       "Draw, add text and blur right after selecting (Lightshot style) • off = the classic button bar, E opens the editor window");
 
     // ---- editing other images ----
     public static string TrayOpenImage => T("เปิดภาพมาแก้ไข…", "Open image to edit…");
