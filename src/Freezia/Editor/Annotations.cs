@@ -1,10 +1,13 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Media.Effects;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using Freezia.Capture;
 
 namespace Freezia.Editor;
@@ -161,9 +164,19 @@ public abstract class Annotation
         foreach (var g in _erasures) erased.Children.Add(g);
         var everything = new RectangleGeometry(new Rect(-50000, -50000, 100000, 100000));
         var visible = new CombinedGeometry(GeometryCombineMode.Exclude, everything, erased);
-        visible.Freeze();
+        // an erasure that is still being drawn (unfrozen) keeps updating the clip by itself
+        if (_erasures.TrueForAll(g => g.IsFrozen)) visible.Freeze();
         Element.Clip = visible;
     }
+
+    /// <summary>Rebuild the clip once the erasures are final (frozen geometry renders faster).</summary>
+    public void RefreshClip() => UpdateClip();
+
+    /// <summary>The drag that created / reshaped this object ended (expensive work can run now).</summary>
+    public virtual void OnDragFinished() { }
+
+    /// <summary>Called before export: finish anything that is still a preview.</summary>
+    public virtual void PrepareForExport() { }
 
     public virtual bool UsesStroke => true;
     public virtual bool UsesFill => false;
@@ -203,8 +216,12 @@ public sealed class StrokeAnnotation : Annotation
         StrokeEndLineCap = PenLineCap.Round,
     };
 
-    private readonly List<Point> _points = new();
-    private StreamGeometry _geometry = new();
+    // Points are appended to one PolyLineSegment (O(1) per point) instead of rebuilding the whole
+    // path for every mouse move; the geometry is frozen when the stroke is finished.
+    private readonly PolyLineSegment _segment = new() { IsStroked = true, IsSmoothJoin = true };
+    private readonly PathGeometry _live;
+    private Geometry _geometry;
+    private Point _last;
 
     public bool IsHighlighter { get; }
     public override FrameworkElement Element => _path;
@@ -212,42 +229,45 @@ public sealed class StrokeAnnotation : Annotation
     public StrokeAnnotation(AnnotationStyle style, Point start, bool highlighter) : base(style)
     {
         IsHighlighter = highlighter;
-        _points.Add(start);
-        Rebuild();
+        _last = start;
+        _segment.Points.Add(start + new Vector(0.01, 0)); // a dot until the pointer moves
+        var figure = new PathFigure { StartPoint = start, IsFilled = false, IsClosed = false };
+        figure.Segments.Add(_segment);
+        _live = new PathGeometry();
+        _live.Figures.Add(figure);
+        _geometry = _live;
+        _path.Data = _live;
         Init();
     }
 
     private double Width => IsHighlighter ? Style.Thickness * 3 + 8 : Style.Thickness;
 
+    public int PointCount => _segment.Points.Count + 1;
+
     public void AddPoint(Point p)
     {
-        var last = _points[^1];
-        if ((p - last).LengthSquared < 0.6) return;
-        _points.Add(p);
-        Rebuild();
+        if ((p - _last).LengthSquared < 0.6) return;
+        if (_geometry != _live) return; // already finished
+        _last = p;
+        _segment.Points.Add(p);
     }
 
-    private void Rebuild()
+    public override void OnDragFinished()
     {
-        var g = new StreamGeometry();
-        using (var ctx = g.Open())
-        {
-            ctx.BeginFigure(_points[0], false, false);
-            if (_points.Count == 1)
-                ctx.LineTo(_points[0] + new Vector(0.01, 0), true, true); // a dot
-            else
-                ctx.PolyLineTo(_points.GetRange(1, _points.Count - 1), true, true);
-        }
-        g.Freeze();
-        _geometry = g;
-        _path.Data = g;
+        if (_geometry != _live) return;
+        var frozen = _live.Clone();
+        frozen.Freeze();
+        _geometry = frozen;
+        _path.Data = frozen;
     }
 
     protected override void ApplyStyle()
     {
-        _path.Stroke = ColorUtil.Brush(Style.Stroke);
+        // highlighter: translucent color (cheaper than element opacity, which needs an offscreen layer)
+        var c = Style.Stroke;
+        if (IsHighlighter) c.A = (byte)Math.Round(c.A * 0.45);
+        _path.Stroke = ColorUtil.Brush(c);
         _path.StrokeThickness = Width;
-        _path.Opacity = IsHighlighter ? 0.45 : 1.0;
         if (IsHighlighter)
         {
             _path.StrokeStartLineCap = _path.StrokeEndLineCap = PenLineCap.Square;
@@ -533,14 +553,22 @@ public sealed class StepAnnotation : Annotation
 // ---------------------------------------------------------------- mosaic (redaction)
 
 /// <summary>
-/// Pixelates a region of the base image. The pixelated pixels are a real bitmap drawn over the image,
+/// Pixelates or blurs a region of the base image. The result is real pixels drawn over the image,
 /// so the exported file never contains the original pixels of that region.
+/// <para>
+/// Pixelate: one pixel per block is computed and shown scaled up (nearest neighbor), so even a large
+/// region costs only a small bitmap. Blur: while dragging, a GPU <see cref="BlurEffect"/> preview is
+/// shown; the exact blur is baked when the drag ends (or before export).
+/// </para>
 /// </summary>
 public sealed class MosaicAnnotation : Annotation
 {
-    private readonly Image _image = new() { Stretch = Stretch.None };
+    private readonly Canvas _box = new() { ClipToBounds = true };
+    private readonly Image _image = new() { Stretch = Stretch.Fill };
     private PixelImage _source;
     private PxRect _baked = default;
+    private bool _previewing;
+    private DispatcherTimer? _bakeTimer;
 
     public override void Rebase(Vector shift, PixelImage newImage)
     {
@@ -550,11 +578,14 @@ public sealed class MosaicAnnotation : Annotation
     }
 
     public Rect Rect { get; private set; }
-    public override FrameworkElement Element => _image;
+    public override FrameworkElement Element => _box;
     public override bool UsesStroke => false;
     protected override bool UsesTranslate => false;
 
     public RedactMode Mode { get; }
+
+    /// <summary>True while a drag is running: blur shows a cheap preview.</summary>
+    public bool Live { get; set; }
 
     public MosaicAnnotation(AnnotationStyle style, Rect rect, PixelImage source, RedactMode mode = RedactMode.Pixelate) : base(style)
     {
@@ -562,6 +593,7 @@ public sealed class MosaicAnnotation : Annotation
         Mode = mode;
         Rect = rect;
         RenderOptions.SetBitmapScalingMode(_image, BitmapScalingMode.NearestNeighbor);
+        _box.Children.Add(_image);
         Init();
     }
 
@@ -572,6 +604,7 @@ public sealed class MosaicAnnotation : Annotation
     }
 
     private int BlockSize => (int)Math.Max(4, Math.Round(Style.Thickness * 2 + 4));
+    private int BlurRadius => (int)Math.Max(2, Math.Round(Style.Thickness * 1.5 + 2));
 
     protected override void ApplyStyle()
     {
@@ -580,6 +613,14 @@ public sealed class MosaicAnnotation : Annotation
     }
 
     protected override void OnOffsetChanged() => Regenerate();
+
+    public override void OnDragFinished()
+    {
+        Live = false;
+        Bake();
+    }
+
+    public override void PrepareForExport() => Bake();
 
     /// <summary>Effective pixel rectangle (integer, clamped to the image).</summary>
     public PxRect PixelRect
@@ -594,33 +635,102 @@ public sealed class MosaicAnnotation : Annotation
         }
     }
 
+    private void Place(PxRect pr)
+    {
+        Canvas.SetLeft(_box, pr.X);
+        Canvas.SetTop(_box, pr.Y);
+        _box.Width = pr.Width;
+        _box.Height = pr.Height;
+    }
+
     private void Regenerate()
     {
         var pr = PixelRect;
         if (pr.IsEmpty)
         {
             _image.Source = null;
+            _image.Effect = null;
             _baked = pr;
+            _previewing = false;
             return;
         }
-        if (pr == _baked && _image.Source != null) return;
-        _baked = pr;
+        if (pr == _baked && _image.Source != null && !_previewing) return;
+        Place(pr);
 
-        if (Mode == RedactMode.Blur)
+        if (Mode == RedactMode.Pixelate)
         {
-            SetBitmap(pr, BlurRegion(pr));
+            Pixelate(pr);
+            _baked = pr;
+            _previewing = false;
             return;
         }
 
+        // Blur: cheap preview now (GPU effect on the original pixels), exact pixels a moment later.
+        ShowBlurPreview(pr);
+        _bakeTimer ??= CreateBakeTimer();
+        _bakeTimer.Stop();
+        if (!Live) _bakeTimer.Start();
+    }
+
+    private DispatcherTimer CreateBakeTimer()
+    {
+        var t = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
+        t.Tick += (_, _) => { t.Stop(); Bake(); };
+        return t;
+    }
+
+    /// <summary>Compute the exact pixels now (blur only; pixelate is always exact).</summary>
+    public void Bake()
+    {
+        _bakeTimer?.Stop();
+        if (Mode != RedactMode.Blur) return;
+        var pr = PixelRect;
+        if (pr.IsEmpty || (pr == _baked && !_previewing && _image.Source != null)) return;
+        Place(pr);
+        var bmp = BitmapSource.Create(pr.Width, pr.Height, 96, 96, PixelFormats.Pbgra32, null, BlurRegion(pr), pr.Width * 4);
+        bmp.Freeze();
+        _image.Effect = null;
+        _image.Source = bmp;
+        Canvas.SetLeft(_image, 0);
+        Canvas.SetTop(_image, 0);
+        _image.Width = pr.Width;
+        _image.Height = pr.Height;
+        _baked = pr;
+        _previewing = false;
+    }
+
+    private void ShowBlurPreview(PxRect pr)
+    {
+        int pad = BlurRadius * 3;
+        var src = new PxRect(pr.X - pad, pr.Y - pad, pr.Width + 2 * pad, pr.Height + 2 * pad)
+            .Intersect(new PxRect(0, 0, _source.Width, _source.Height));
+        var crop = new CroppedBitmap(_source.Source, new Int32Rect(src.X, src.Y, src.Width, src.Height));
+        crop.Freeze();
+        _image.Source = crop;
+        _image.Width = src.Width;
+        _image.Height = src.Height;
+        Canvas.SetLeft(_image, src.X - pr.X);
+        Canvas.SetTop(_image, src.Y - pr.Y);
+        // three box passes of radius r are close to a Gaussian with sigma ~ r; BlurEffect radius ~ 3 sigma
+        _image.Effect ??= new BlurEffect { KernelType = KernelType.Gaussian, RenderingBias = RenderingBias.Performance };
+        ((BlurEffect)_image.Effect).Radius = BlurRadius * 2.2;
+        _previewing = true;
+        _baked = pr;
+    }
+
+    /// <summary>One averaged pixel per block, shown scaled up with nearest-neighbor sampling.</summary>
+    private void Pixelate(PxRect pr)
+    {
         int bs = BlockSize;
-        int w = pr.Width, h = pr.Height, stride = w * 4;
-        var dst = new byte[stride * h];
+        int w = pr.Width, h = pr.Height;
+        int cols = (w + bs - 1) / bs, rows = (h + bs - 1) / bs;
+        var dst = new byte[cols * rows * 4];
         byte[] src = _source.Pixels;
         int sstride = _source.Stride;
-        for (int by = 0; by < h; by += bs)
+        for (int by = 0, row = 0; by < h; by += bs, row++)
         {
             int bh = Math.Min(bs, h - by);
-            for (int bx = 0; bx < w; bx += bs)
+            for (int bx = 0, col = 0; bx < w; bx += bs, col++)
             {
                 int bw = Math.Min(bs, w - bx);
                 long sb = 0, sg = 0, sr = 0;
@@ -635,32 +745,21 @@ public sealed class MosaicAnnotation : Annotation
                     }
                 }
                 int n = bw * bh;
-                byte b = (byte)(sb / n), g = (byte)(sg / n), r = (byte)(sr / n);
-                for (int y = 0; y < bh; y++)
-                {
-                    int di = (by + y) * stride + bx * 4;
-                    for (int x = 0; x < bw; x++, di += 4)
-                    {
-                        dst[di] = b;
-                        dst[di + 1] = g;
-                        dst[di + 2] = r;
-                        dst[di + 3] = 255;
-                    }
-                }
+                int di = (row * cols + col) * 4;
+                dst[di] = (byte)(sb / n);
+                dst[di + 1] = (byte)(sg / n);
+                dst[di + 2] = (byte)(sr / n);
+                dst[di + 3] = 255;
             }
         }
-        SetBitmap(pr, dst);
-    }
-
-    private void SetBitmap(PxRect pr, byte[] pixels)
-    {
-        var bmp = BitmapSource.Create(pr.Width, pr.Height, 96, 96, PixelFormats.Pbgra32, null, pixels, pr.Width * 4);
+        var bmp = BitmapSource.Create(cols, rows, 96, 96, PixelFormats.Pbgra32, null, dst, cols * 4);
         bmp.Freeze();
+        _image.Effect = null;
         _image.Source = bmp;
-        _image.Width = pr.Width;
-        _image.Height = pr.Height;
-        Canvas.SetLeft(_image, pr.X);
-        Canvas.SetTop(_image, pr.Y);
+        _image.Width = cols * bs; // partial blocks at the right / bottom are cut by the box
+        _image.Height = rows * bs;
+        Canvas.SetLeft(_image, 0);
+        Canvas.SetTop(_image, 0);
     }
 
     /// <summary>
@@ -669,44 +768,54 @@ public sealed class MosaicAnnotation : Annotation
     /// </summary>
     private byte[] BlurRegion(PxRect pr)
     {
-        int radius = (int)Math.Max(2, Math.Round(Style.Thickness * 1.5 + 2));
+        int radius = BlurRadius;
         int pad = radius * 3;
         var src = new PxRect(pr.X - pad, pr.Y - pad, pr.Width + 2 * pad, pr.Height + 2 * pad)
             .Intersect(new PxRect(0, 0, _source.Width, _source.Height));
-        int w = src.Width, h = src.Height;
-        var a = new float[w * h * 3];
-        for (int y = 0; y < h; y++)
+        int w = src.Width, h = src.Height, n = w * h * 3;
+        var pool = ArrayPool<float>.Shared;
+        float[] a = pool.Rent(n), b = pool.Rent(n), sums = pool.Rent(w * 3);
+        try
         {
-            int si = (src.Y + y) * _source.Stride + src.X * 4;
-            for (int x = 0; x < w; x++, si += 4)
+            byte[] px = _source.Pixels;
+            for (int y = 0; y < h; y++)
             {
-                int di = (y * w + x) * 3;
-                a[di] = _source.Pixels[si];
-                a[di + 1] = _source.Pixels[si + 1];
-                a[di + 2] = _source.Pixels[si + 2];
+                int si = (src.Y + y) * _source.Stride + src.X * 4;
+                int di = y * w * 3;
+                for (int x = 0; x < w; x++, si += 4, di += 3)
+                {
+                    a[di] = px[si];
+                    a[di + 1] = px[si + 1];
+                    a[di + 2] = px[si + 2];
+                }
             }
-        }
-        var b = new float[a.Length];
-        for (int pass = 0; pass < 3; pass++)
-        {
-            BoxH(a, b, w, h, radius);
-            BoxV(b, a, w, h, radius);
-        }
-        var dst = new byte[pr.Width * pr.Height * 4];
-        int ox = pr.X - src.X, oy = pr.Y - src.Y;
-        for (int y = 0; y < pr.Height; y++)
-        {
-            for (int x = 0; x < pr.Width; x++)
+            for (int pass = 0; pass < 3; pass++)
             {
-                int si = ((y + oy) * w + (x + ox)) * 3;
-                int di = (y * pr.Width + x) * 4;
-                dst[di] = (byte)Math.Clamp(a[si], 0, 255);
-                dst[di + 1] = (byte)Math.Clamp(a[si + 1], 0, 255);
-                dst[di + 2] = (byte)Math.Clamp(a[si + 2], 0, 255);
-                dst[di + 3] = 255;
+                BoxH(a, b, w, h, radius);
+                BoxV(b, a, w, h, radius, sums);
             }
+            var dst = new byte[pr.Width * pr.Height * 4];
+            int ox = pr.X - src.X, oy = pr.Y - src.Y;
+            for (int y = 0; y < pr.Height; y++)
+            {
+                int si = ((y + oy) * w + ox) * 3;
+                int di = y * pr.Width * 4;
+                for (int x = 0; x < pr.Width; x++, si += 3, di += 4)
+                {
+                    dst[di] = (byte)Math.Clamp(a[si], 0, 255);
+                    dst[di + 1] = (byte)Math.Clamp(a[si + 1], 0, 255);
+                    dst[di + 2] = (byte)Math.Clamp(a[si + 2], 0, 255);
+                    dst[di + 3] = 255;
+                }
+            }
+            return dst;
         }
-        return dst;
+        finally
+        {
+            pool.Return(a);
+            pool.Return(b);
+            pool.Return(sums);
+        }
     }
 
     private static void BoxH(float[] src, float[] dst, int w, int h, int r)
@@ -729,21 +838,25 @@ public sealed class MosaicAnnotation : Annotation
         }
     }
 
-    private static void BoxV(float[] src, float[] dst, int w, int h, int r)
+    /// <summary>Vertical box pass, row by row with running column sums (sequential memory access).</summary>
+    private static void BoxV(float[] src, float[] dst, int w, int h, int r, float[] sums)
     {
         float inv = 1f / (2 * r + 1);
-        for (int x = 0; x < w; x++)
+        int rowLen = w * 3;
+        Array.Clear(sums, 0, rowLen);
+        for (int k = -r; k <= r; k++)
         {
-            for (int c = 0; c < 3; c++)
+            int ry = Math.Clamp(k, 0, h - 1) * rowLen;
+            for (int i = 0; i < rowLen; i++) sums[i] += src[ry + i];
+        }
+        for (int y = 0; y < h; y++)
+        {
+            int dy = y * rowLen;
+            int add = Math.Min(y + r + 1, h - 1) * rowLen, sub = Math.Max(y - r, 0) * rowLen;
+            for (int i = 0; i < rowLen; i++)
             {
-                float sum = 0;
-                for (int k = -r; k <= r; k++) sum += src[(Math.Clamp(k, 0, h - 1) * w + x) * 3 + c];
-                for (int y = 0; y < h; y++)
-                {
-                    dst[(y * w + x) * 3 + c] = sum * inv;
-                    int add = Math.Min(y + r + 1, h - 1), sub = Math.Max(y - r, 0);
-                    sum += src[(add * w + x) * 3 + c] - src[(sub * w + x) * 3 + c];
-                }
+                dst[dy + i] = sums[i] * inv;
+                sums[i] += src[add + i] - src[sub + i];
             }
         }
     }
@@ -792,11 +905,21 @@ public sealed class SpotlightAnnotation : Annotation
         }
     }
 
+    private static readonly Brush OutlineBrush = Freeze(new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)));
+
+    private static Brush Freeze(Brush b)
+    {
+        b.Freeze();
+        return b;
+    }
+
     protected override void ApplyStyle()
     {
         double rad = Math.Min(Style.Thickness * 1.5, Math.Min(Rect.Width, Rect.Height) / 2);
-        _path.Data = IsEllipse ? new EllipseGeometry(Rect) : new RectangleGeometry(Rect, rad, rad);
-        _path.Stroke = new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF));
+        Geometry g = IsEllipse ? new EllipseGeometry(Rect) : new RectangleGeometry(Rect, rad, rad);
+        g.Freeze();
+        _path.Data = g;
+        _path.Stroke = OutlineBrush;
     }
 
     public override Rect LocalBounds => Rect;

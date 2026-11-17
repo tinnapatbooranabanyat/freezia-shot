@@ -46,7 +46,20 @@ public sealed class EditSurface : UserControl
     private readonly Ellipse _eraserCursor;
     private bool _erasing;
     private readonly List<Point> _erasePoints = new();
-    private readonly Dictionary<Annotation, Geometry> _eraseApplied = new();
+    private readonly Dictionary<Annotation, GeometryGroup> _eraseApplied = new();
+    private int _eraseDone; // eraser points already applied
+
+    // pointer moves are applied once per rendered frame (strokes still keep every point)
+    private Point? _pendingMove;
+    private bool _frameHooked;
+    private Point _lastPointer;
+
+    // Ctrl+wheel size feedback
+    private readonly Ellipse _sizePreview;
+    private readonly Border _sizeBadge;
+    private readonly TextBlock _sizeText;
+    private readonly DispatcherTimer _sizeTimer;
+    private int _spotCount;
 
     // drag state
     private Annotation? _drawing;
@@ -167,6 +180,29 @@ public sealed class EditSurface : UserControl
             Visibility = Visibility.Collapsed,
         };
         AdornerLayer.Children.Add(_eraserCursor);
+        _sizePreview = new Ellipse
+        {
+            Stroke = (Brush)FindResource("AccentBrush"),
+            Fill = new SolidColorBrush(Color.FromArgb(0x26, 0xFF, 0xFF, 0xFF)),
+            Visibility = Visibility.Collapsed,
+        };
+        _sizeText = new TextBlock { Foreground = Brushes.White, FontWeight = FontWeights.SemiBold, FontSize = 12 };
+        _sizeBadge = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0xCC, 0x20, 0x21, 0x27)),
+            CornerRadius = new CornerRadius(5),
+            Padding = new Thickness(6, 1, 6, 2),
+            Child = _sizeText,
+            Visibility = Visibility.Collapsed,
+        };
+        AdornerLayer.Children.Add(_sizePreview);
+        AdornerLayer.Children.Add(_sizeBadge);
+        _sizeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
+        _sizeTimer.Tick += (_, _) =>
+        {
+            _sizeTimer.Stop();
+            _sizePreview.Visibility = _sizeBadge.Visibility = Visibility.Collapsed;
+        };
 
         _pendingStyleTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
         _pendingStyleTimer.Tick += (_, _) => FlushPendingStyle();
@@ -346,6 +382,7 @@ public sealed class EditSurface : UserControl
                 _erasePoints.Clear();
                 _erasePoints.Add(p);
                 _eraseApplied.Clear();
+                _eraseDone = 0;
                 UpdateErase();
                 CaptureInput();
                 break;
@@ -363,6 +400,7 @@ public sealed class EditSurface : UserControl
 
     private void StartDrawing(Annotation a)
     {
+        if (a is MosaicAnnotation m) m.Live = true;
         _drawing = a;
         AddItem(a, _items.Count);
         CaptureInput();
@@ -370,18 +408,52 @@ public sealed class EditSurface : UserControl
 
     public void PointerMove(Point p)
     {
+        _lastPointer = p;
         PointerMoved?.Invoke(p);
-
         if (_tool == EditorTool.Eraser) UpdateEraserCursor(p);
-        if (_erasing)
+
+        // brush: keep every point (appending is cheap)
+        if (_drawing is StrokeAnnotation stroke)
         {
-            if ((p - _erasePoints[^1]).LengthSquared >= 1)
-            {
-                _erasePoints.Add(p);
-                UpdateErase();
-            }
+            stroke.AddPoint(p);
             return;
         }
+        if (_erasing)
+        {
+            if ((p - _erasePoints[^1]).LengthSquared >= 1) _erasePoints.Add(p);
+        }
+        else _pendingMove = p;
+        ScheduleFrame();
+    }
+
+    private void ScheduleFrame()
+    {
+        if (_frameHooked) return;
+        _frameHooked = true;
+        CompositionTarget.Rendering += OnFrame;
+    }
+
+    private void OnFrame(object? sender, EventArgs e) => FlushMoves();
+
+    /// <summary>Apply the latest pointer position (once per frame, and before any drag ends).</summary>
+    private void FlushMoves()
+    {
+        if (_frameHooked)
+        {
+            CompositionTarget.Rendering -= OnFrame;
+            _frameHooked = false;
+        }
+        if (_erasing && _eraseDone < _erasePoints.Count) UpdateErase();
+        if (_pendingMove is Point p)
+        {
+            _pendingMove = null;
+            ApplyMove(p);
+        }
+    }
+
+    private void ApplyMove(Point p)
+    {
+        if (_erasing) return;
 
         if (_endpointDrag != 0 && _selected is LineAnnotation dl)
         {
@@ -430,6 +502,7 @@ public sealed class EditSurface : UserControl
 
     public void PointerUp(Point p)
     {
+        FlushMoves();
         if (_erasing)
         {
             FinishDrag();
@@ -445,6 +518,7 @@ public sealed class EditSurface : UserControl
     /// <summary>The host lost the mouse capture: end whatever drag is running.</summary>
     public void PointerCaptureLost()
     {
+        FlushMoves();
         if (IsDragging) FinishDrag();
     }
 
@@ -455,8 +529,15 @@ public sealed class EditSurface : UserControl
         if (_erasing)
         {
             _erasing = false;
-            var applied = new Dictionary<Annotation, Geometry>(_eraseApplied);
+            _eraseDone = 0;
+            var applied = new Dictionary<Annotation, GeometryGroup>(_eraseApplied);
             _eraseApplied.Clear();
+            foreach (var (a, g) in applied)
+            {
+                // the stroke is final: freeze it so the clip renders from a frozen geometry
+                if (!g.IsFrozen && g.CanFreeze) g.Freeze();
+                a.RefreshClip();
+            }
             if (applied.Count > 0)
             {
                 _undo.Push("erase",
@@ -489,6 +570,7 @@ public sealed class EditSurface : UserControl
             }
             else if ((to - from).LengthSquared > 0.01)
                 _undo.Push("move", () => { a.Offset = from; UpdateAdorner(); }, () => { a.Offset = to; UpdateAdorner(); });
+            a.OnDragFinished();
         }
         _moving = false;
         _textClick = null;
@@ -506,6 +588,7 @@ public sealed class EditSurface : UserControl
                 SpotlightAnnotation sp => sp.Rect.Width < 2 || sp.Rect.Height < 2,
                 _ => false,
             };
+            a.OnDragFinished();
             if (tooSmall) RemoveItem(a);
             else
             {
@@ -530,6 +613,7 @@ public sealed class EditSurface : UserControl
             foreach (var (a, g) in _eraseApplied) a.RemoveErasure(g);
             _eraseApplied.Clear();
             _erasing = false;
+            _eraseDone = 0;
             ReleaseInput();
             return true;
         }
@@ -641,16 +725,16 @@ public sealed class EditSurface : UserControl
         index = Math.Clamp(index, 0, _items.Count);
         _items.Insert(index, a);
         DrawCanvas.Children.Insert(index, a.Element);
-        if (a is SpotlightAnnotation) UpdateSpotlights();
+        if (a is SpotlightAnnotation) { _spotCount++; UpdateSpotlights(); }
         CommandsChanged?.Invoke();
     }
 
     public void RemoveItem(Annotation a)
     {
         if (_selected == a) Select(null);
-        _items.Remove(a);
+        bool removed = _items.Remove(a);
         DrawCanvas.Children.Remove(a.Element);
-        if (a is SpotlightAnnotation) UpdateSpotlights();
+        if (a is SpotlightAnnotation && removed) { _spotCount--; UpdateSpotlights(); }
         CommandsChanged?.Invoke();
     }
 
@@ -680,32 +764,44 @@ public sealed class EditSurface : UserControl
     /// </summary>
     private void UpdateErase()
     {
-        var line = new StreamGeometry();
-        using (var ctx = line.Open())
-        {
-            ctx.BeginFigure(_erasePoints[0], false, false);
-            if (_erasePoints.Count == 1) ctx.LineTo(_erasePoints[0] + new Vector(0.01, 0), true, true);
-            else ctx.PolyLineTo(_erasePoints.GetRange(1, _erasePoints.Count - 1), true, true);
-        }
+        if (_eraseDone > _erasePoints.Count) _eraseDone = 0;
+        if (_erasePoints.Count == 0) return;
         var pen = new Pen(Brushes.Black, EraserSize)
         {
             StartLineCap = PenLineCap.Round,
             EndLineCap = PenLineCap.Round,
             LineJoin = PenLineJoin.Round,
         };
-        Geometry shape = line.GetWidenedPathGeometry(pen);
-        shape.Freeze();
-        var bounds = shape.Bounds;
-
-        foreach (var a in _items)
+        pen.Freeze();
+        // Only the new segments are widened and added to each touched object's erasure group,
+        // so a long eraser stroke costs the same per move as a short one.
+        for (int i = _eraseDone; i < _erasePoints.Count; i++)
         {
-            bool touched = _eraseApplied.ContainsKey(a) || (a.Element.Visibility == Visibility.Visible && a.Bounds.IntersectsWith(bounds));
-            if (!touched) continue;
-            if (_eraseApplied.TryGetValue(a, out var old)) a.RemoveErasure(old);
-            var local = a.ToLocal(shape);
-            a.AddErasure(local);
-            _eraseApplied[a] = local;
+            Point from = i == 0 ? _erasePoints[0] : _erasePoints[i - 1];
+            Point to = i == 0 ? _erasePoints[0] + new Vector(0.01, 0) : _erasePoints[i];
+            var seg = new StreamGeometry();
+            using (var ctx = seg.Open())
+            {
+                ctx.BeginFigure(from, false, false);
+                ctx.LineTo(to, true, true);
+            }
+            Geometry shape = seg.GetWidenedPathGeometry(pen);
+            shape.Freeze();
+            var bounds = shape.Bounds;
+            foreach (var a in _items)
+            {
+                if (a.Element.Visibility != Visibility.Visible || !a.Bounds.IntersectsWith(bounds)) continue;
+                if (!_eraseApplied.TryGetValue(a, out var group))
+                {
+                    group = new GeometryGroup { FillRule = FillRule.Nonzero };
+                    _eraseApplied[a] = group;
+                    group.Children.Add(a.ToLocal(shape));
+                    a.AddErasure(group);
+                }
+                else group.Children.Add(a.ToLocal(shape));
+            }
         }
+        _eraseDone = _erasePoints.Count;
     }
 
     /// <summary>Remove every drawing in one undoable step.</summary>
@@ -751,6 +847,7 @@ public sealed class EditSurface : UserControl
     /// <summary>One dim layer for all spotlights: the image minus the union of their bright areas.</summary>
     public void UpdateSpotlights()
     {
+        if (_spotCount <= 0 && SpotDim.Data == null) return;
         var spots = _items.OfType<SpotlightAnnotation>().Where(s => s.Element.Visibility == Visibility.Visible).ToList();
         if (spots.Count == 0)
         {
@@ -766,7 +863,7 @@ public sealed class EditSurface : UserControl
 
     public void UpdateAdorner()
     {
-        UpdateSpotlights();
+        if (_selected is SpotlightAnnotation) UpdateSpotlights();
         _handleStart.Visibility = _handleEnd.Visibility = Visibility.Collapsed;
         if (_selected == null || !_items.Contains(_selected))
         {
@@ -825,6 +922,7 @@ public sealed class EditSurface : UserControl
         if (_selected != null && !_items.Contains(_selected)) _selected = null;
         if (_selected != null) Select(_selected);
         UpdateAdorner();
+        UpdateSpotlights();
         CommandsChanged?.Invoke();
     }
 
@@ -863,6 +961,7 @@ public sealed class EditSurface : UserControl
         var list = _items.ToList();
         foreach (var a in list) DrawCanvas.Children.Remove(a.Element);
         _items.Clear();
+        _spotCount = 0;
         UpdateSpotlights();
         CommandsChanged?.Invoke();
         return list;
@@ -876,6 +975,7 @@ public sealed class EditSurface : UserControl
             a.Rebase(shift, _image);
             _items.Add(a);
             DrawCanvas.Children.Add(a.Element);
+            if (a is SpotlightAnnotation) _spotCount++;
         }
         UpdateSpotlights();
         CommandsChanged?.Invoke();
@@ -935,6 +1035,62 @@ public sealed class EditSurface : UserControl
         var after = a.Style;
         if (before != after)
             _undo.Push("style", () => { a.SetStyle(before); UpdateAdorner(); }, () => { a.SetStyle(after); UpdateAdorner(); });
+    }
+
+    /// <summary>The current tool (or the selected object) has a size that Ctrl+wheel can change.</summary>
+    public bool ToolUsesSize =>
+        _textBox != null
+        || (_tool is not (EditorTool.Select or EditorTool.None or EditorTool.Crop))
+        || (_selected != null && (_selected.UsesThickness || _selected.UsesFont));
+
+    /// <summary>Ctrl+wheel: one step bigger / smaller. Returns false when the tool has no size (the host may zoom).</summary>
+    public bool AdjustSize(int direction)
+    {
+        if (direction == 0 || !ToolUsesSize) return false;
+        if (SliderIsFont)
+        {
+            double v = Math.Clamp(_fontSize + direction * 2, 8, 120);
+            ChangeStyle(s => s with { FontSize = v }, mergeable: true);
+            ShowSizeFeedback($"{v:0}", 0);
+        }
+        else
+        {
+            double v = Math.Clamp(_thickness + direction, 1, 30);
+            ChangeStyle(s => s with { Thickness = v }, mergeable: true);
+            bool highlighter = _selected is StrokeAnnotation { IsHighlighter: true } || (_selected == null && _tool == EditorTool.Highlighter);
+            // diameter of what the brush will paint, in image pixels
+            double d = _tool == EditorTool.Eraser ? EraserSize
+                : highlighter ? v * 3 + 8
+                : _tool == EditorTool.Mosaic ? Math.Max(4, Math.Round(v * 2 + 4))
+                : _tool == EditorTool.Blur ? Math.Max(2, Math.Round(v * 1.5 + 2)) * 2
+                : _tool == EditorTool.Step ? 20 + v * 3
+                : v;
+            ShowSizeFeedback($"{v:0}", d);
+        }
+        return true;
+    }
+
+    /// <summary>A circle the size of the brush at the pointer and the value next to it, for a moment.</summary>
+    private void ShowSizeFeedback(string text, double diameter)
+    {
+        var p = _lastPointer;
+        double s = _viewScale;
+        if (diameter > 0)
+        {
+            _sizePreview.Width = _sizePreview.Height = diameter;
+            _sizePreview.StrokeThickness = 1.5 / s;
+            Canvas.SetLeft(_sizePreview, p.X - diameter / 2);
+            Canvas.SetTop(_sizePreview, p.Y - diameter / 2);
+            _sizePreview.Visibility = _tool == EditorTool.Eraser ? Visibility.Collapsed : Visibility.Visible;
+        }
+        else _sizePreview.Visibility = Visibility.Collapsed;
+        _sizeText.Text = text;
+        _sizeBadge.LayoutTransform = new ScaleTransform(1 / s, 1 / s);
+        Canvas.SetLeft(_sizeBadge, p.X + Math.Max(diameter / 2, 0) + 8 / s);
+        Canvas.SetTop(_sizeBadge, p.Y - 10 / s);
+        _sizeBadge.Visibility = Visibility.Visible;
+        _sizeTimer.Stop();
+        _sizeTimer.Start();
     }
 
     /// <summary>The size slider edits the font size (text) rather than the line thickness.</summary>
@@ -1105,6 +1261,7 @@ public sealed class EditSurface : UserControl
     {
         CommitText();
         FlushPendingStyle();
+        foreach (var a in _items) a.PrepareForExport();
         var r = region ?? new Int32Rect(0, 0, _image.Width, _image.Height);
         int w = Math.Max(1, r.Width), h = Math.Max(1, r.Height);
         ExportRoot.UpdateLayout();

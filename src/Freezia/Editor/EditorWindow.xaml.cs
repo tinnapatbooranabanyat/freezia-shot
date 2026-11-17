@@ -533,7 +533,9 @@ public partial class EditorWindow : Window
         var mods = Keyboard.Modifiers;
         if (mods.HasFlag(ModifierKeys.Control))
         {
-            ZoomStep(e.Delta > 0 ? +1 : -1, e.GetPosition(Scroller));
+            // Ctrl+wheel: brush / tool size when the tool has one, zoom otherwise (Ctrl +/- always zoom)
+            if (!Surface.AdjustSize(e.Delta > 0 ? +1 : -1))
+                ZoomStep(e.Delta > 0 ? +1 : -1, e.GetPosition(Scroller));
             e.Handled = true;
         }
         else if (mods.HasFlag(ModifierKeys.Shift))
